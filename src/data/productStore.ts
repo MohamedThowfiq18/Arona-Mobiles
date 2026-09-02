@@ -21,7 +21,7 @@ export function getStoredProducts(): Product[] {
   }
   
   // Fallback to sample products & save initial set
-  saveProducts(SAMPLE_PRODUCTS);
+  saveProducts(SAMPLE_PRODUCTS, false);
   return SAMPLE_PRODUCTS;
 }
 
@@ -83,22 +83,25 @@ export function resetProductsToDefault(): Product[] {
  * Synchronize local products with global cloud store so all devices worldwide show identical data
  */
 export async function syncProductsWithCloud(): Promise<Product[]> {
-  const cloudProducts = await fetchCloudProducts();
-  if (cloudProducts && cloudProducts.length > 0) {
-    const localRaw = localStorage.getItem(STORAGE_KEY);
-    const cloudRaw = JSON.stringify(cloudProducts);
-    
-    if (localRaw !== cloudRaw) {
-      localStorage.setItem(STORAGE_KEY, cloudRaw);
-      window.dispatchEvent(new Event('arona_products_updated'));
+  try {
+    const cloudProducts = await fetchCloudProducts();
+    if (cloudProducts && cloudProducts.length > 0) {
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const cloudRaw = JSON.stringify(cloudProducts);
+      
+      if (localRaw !== cloudRaw) {
+        localStorage.setItem(STORAGE_KEY, cloudRaw);
+        window.dispatchEvent(new Event('arona_products_updated'));
+      }
+      return cloudProducts;
     }
-    return cloudProducts;
-  } else {
-    // If cloud has no products yet, push local catalog to cloud
-    const currentLocal = getStoredProducts();
-    pushCloudProducts(currentLocal);
-    return currentLocal;
+  } catch (error) {
+    console.warn('Cloud store sync error:', error);
   }
+  
+  const currentLocal = getStoredProducts();
+  pushCloudProducts(currentLocal).catch(() => {});
+  return currentLocal;
 }
 
 // Auto-sync on window load and periodically
