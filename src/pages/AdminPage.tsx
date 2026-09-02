@@ -16,10 +16,13 @@ import {
   Send,
   CheckCircle,
   AlertCircle,
-  Key
+  Key,
+  Edit,
+  RotateCcw
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
 import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProductsToDefault } from '../data/productStore';
+import { compressImage } from '../utils/imageCompressor';
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
@@ -37,7 +40,14 @@ export const AdminPage: React.FC = () => {
     return sessionStorage.getItem('arona_owner_auth') === 'true';
   });
 
-  const [authMode, setAuthMode] = useState<'PHONE' | 'OTP' | 'PASSWORD' | 'CREATE_PASSWORD'>('PHONE');
+  // Default to PASSWORD if a password was previously set, else PHONE
+  const [authMode, setAuthMode] = useState<
+    'PHONE' | 'OTP' | 'PASSWORD' | 'CREATE_PASSWORD' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'RESET_PASSWORD'
+  >(() => {
+    const existingPassword = localStorage.getItem('arona_owner_created_password');
+    return existingPassword ? 'PASSWORD' : 'PHONE';
+  });
+
   const [phone, setPhone] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
@@ -48,11 +58,12 @@ export const AdminPage: React.FC = () => {
   const [authError, setAuthError] = useState('');
   const [smsBanner, setSmsBanner] = useState('');
 
-  // Products State
+  // Products State & Edit Mode
   const [products, setProducts] = useState<Product[]>([]);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string>('');
 
-  // Upload Form State
+  // Upload/Edit Form State
   const [name, setName] = useState('');
   const [brand, setBrand] = useState<Product['brand']>('Apple');
   const [condition, setCondition] = useState<ProductCondition>('new');
@@ -79,7 +90,7 @@ export const AdminPage: React.FC = () => {
   // Normalize phone number (strip spaces, hyphens, leading +)
   const cleanPhone = (num: string) => num.replace(/[\s\-\+\(\)]/g, '');
 
-  // Mask phone number showing only first 2 and last 2 digits (e.g. +91 96XXXXXX06)
+  // Mask phone number showing only first 2 and last 2 digits (e.g. +91 96XXXXXX06 / +91 97XXXXXX17)
   const maskPhoneNumber = (num: string) => {
     const cleaned = num.replace(/[\s\-\+\(\)]/g, '').slice(-10);
     if (cleaned.length === 10) {
@@ -88,7 +99,7 @@ export const AdminPage: React.FC = () => {
     return num ? `+91 ${num}` : '';
   };
 
-  // Step 1: Send OTP
+  // Step 1: Send OTP for Login
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -143,15 +154,25 @@ export const AdminPage: React.FC = () => {
   // Step 3: Password Login
   const handlePasswordLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
+
+    const cleaned = cleanPhone(phone);
+    const isAllowed = ALLOWED_PHONE_NUMBERS.some(allowed => cleanPhone(allowed) === cleaned || cleaned.endsWith(allowed.slice(-10)));
+
+    if (!isAllowed) {
+      setAuthError('Unauthorized phone number. Only registered ARONA MOBILES owner phone numbers (+91 96XXXXXX06 / +91 97XXXXXX17) can log in.');
+      return;
+    }
+
     const savedPassword = localStorage.getItem('arona_owner_created_password');
     if (passwordInput === savedPassword) {
       completeLogin();
     } else {
-      setAuthError('Incorrect Password. You can also use OTP Login.');
+      setAuthError('Incorrect Password. Click "Forgot Password? Reset via SMS OTP" below to reset your password via mobile OTP.');
     }
   };
 
-  // Step 4: Create Owner Password
+  // Step 4: Create Initial Owner Password
   const handleCreatePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 4) {
@@ -167,6 +188,60 @@ export const AdminPage: React.FC = () => {
     completeLogin();
   };
 
+  // FORGOT PASSWORD FLOW VIA MOBILE OTP
+  const handleStartForgotPassword = () => {
+    setAuthMode('FORGOT_PHONE');
+    setAuthError('');
+    setSmsBanner('');
+    setOtpInput('');
+  };
+
+  const handleSendResetOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    const cleaned = cleanPhone(phone);
+    const isAllowed = ALLOWED_PHONE_NUMBERS.some(allowed => cleanPhone(allowed) === cleaned || cleaned.endsWith(allowed.slice(-10)));
+
+    if (!isAllowed) {
+      setAuthError('Unauthorized phone number. Password reset OTP can only be sent to registered owner phone numbers (+91 96XXXXXX06 / +91 97XXXXXX17).');
+      return;
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(code);
+    setSmsBanner(`🔑 Password Reset SMS OTP sent to registered mobile ${maskPhoneNumber(phone)}: Your OTP is ${code}`);
+    setAuthMode('FORGOT_OTP');
+  };
+
+  const handleVerifyResetOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpInput.trim() === generatedOtp) {
+      setAuthError('');
+      setAuthMode('RESET_PASSWORD');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      setAuthError('Invalid OTP code. Please enter the 6-digit verification code sent to your registered mobile number.');
+    }
+  };
+
+  const handleSaveResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 4) {
+      setAuthError('Password must be at least 4 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setAuthError('Passwords do not match.');
+      return;
+    }
+
+    localStorage.setItem('arona_owner_created_password', newPassword);
+    setSuccessMsg('Owner password reset successfully! Welcome to the ARONA Owner Portal.');
+    completeLogin();
+  };
+
   const completeLogin = () => {
     setIsAuthenticated(true);
     sessionStorage.setItem('arona_owner_auth', 'true');
@@ -177,22 +252,30 @@ export const AdminPage: React.FC = () => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('arona_owner_auth');
-    setAuthMode('PHONE');
+    const existingPassword = localStorage.getItem('arona_owner_created_password');
+    setAuthMode(existingPassword ? 'PASSWORD' : 'PHONE');
     setPhone('');
     setOtpInput('');
     setPasswordInput('');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Compressed Image File Upload Handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
+      try {
+        const compressed = await compressImage(file, 1000, 0.75);
+        setImagePreview(compressed);
         setImageUrlInput('');
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Failed to compress image:', err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+          setImageUrlInput('');
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -201,7 +284,51 @@ export const AdminPage: React.FC = () => {
     setImagePreview(url);
   };
 
-  const handleAddProduct = (e: React.FormEvent) => {
+  // Clear form & cancel edit
+  const resetForm = () => {
+    setEditingProductId(null);
+    setName('');
+    setBrand('Apple');
+    setCondition('new');
+    setSellingPrice('');
+    setMrp('');
+    setStorage('128GB');
+    setRam('8GB');
+    setColor('Black');
+    setWarrantyInfo('1 Year Official Brand Warranty');
+    setBatteryHealth(95);
+    setGrade('A+');
+    setBoxAvailable(true);
+    setBillAvailable(true);
+    setHighlightsText('100% Genuine product\nVerified hardware inspection\nReady for immediate delivery');
+    setImagePreview('');
+    setImageUrlInput('');
+  };
+
+  // Edit existing product
+  const handleEditClick = (prod: Product) => {
+    setEditingProductId(prod.id);
+    setName(prod.name);
+    setBrand(prod.brand);
+    setCondition(prod.condition);
+    setSellingPrice(prod.sellingPrice.toString());
+    setMrp(prod.mrp.toString());
+    setStorage(prod.storage || '128GB');
+    setRam(prod.ram || '8GB');
+    setColor(prod.color);
+    setWarrantyInfo(prod.warrantyInfo || '1 Year Official Brand Warranty');
+    setBatteryHealth(prod.batteryHealth || 95);
+    setGrade(prod.grade || 'A+');
+    setBoxAvailable(prod.boxAvailable ?? true);
+    setBillAvailable(prod.billAvailable ?? true);
+    setHighlightsText(prod.highlights ? prod.highlights.join('\n') : '');
+    setImagePreview(prod.images[0] || '');
+    setImageUrlInput('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Add or Update Product
+  const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -215,55 +342,78 @@ export const AdminPage: React.FC = () => {
 
     const finalImage = imagePreview || imageUrlInput || 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80';
 
-    const newProduct: Product = {
-      id: 'prod-' + Date.now(),
-      name: name.trim(),
-      brand,
-      category: 'mobile',
-      condition,
-      mrp: Number(mrp) || Number(sellingPrice) * 1.15,
-      sellingPrice: Number(sellingPrice),
-      emiAvailable: true,
-      storage,
-      ram,
-      color,
-      images: [finalImage],
-      inStock: true,
-      featured: true,
-      warrantyInfo: condition === 'new' ? warrantyInfo : '6 Months ARONA Care Certified Warranty',
-      batteryHealth: condition === 'used' ? batteryHealth : undefined,
-      grade: condition === 'used' ? grade : undefined,
-      boxAvailable: condition === 'used' ? boxAvailable : true,
-      billAvailable: condition === 'used' ? billAvailable : true,
-      highlights: highlightsText.split('\n').filter(h => h.trim().length > 0),
-      specifications: {
-        screen: 'Dynamic Retina / AMOLED Display',
-        processor: 'High Performance Octa-Core Chipset',
-        camera: 'Pro Multi-Lens Camera System',
-        battery: 'Long Lasting All-Day Battery',
-        os: brand === 'Apple' ? 'iOS' : 'Android',
-        network: '5G High-Speed Cellular'
-      }
-    };
+    if (editingProductId) {
+      // Update existing product
+      const updatedFields: Partial<Product> = {
+        name: name.trim(),
+        brand,
+        condition,
+        mrp: Number(mrp) || Number(sellingPrice) * 1.15,
+        sellingPrice: Number(sellingPrice),
+        storage,
+        ram,
+        color,
+        images: [finalImage],
+        warrantyInfo: condition === 'new' ? warrantyInfo : '6 Months ARONA Care Certified Warranty',
+        batteryHealth: condition === 'used' ? batteryHealth : undefined,
+        grade: condition === 'used' ? grade : undefined,
+        boxAvailable: condition === 'used' ? boxAvailable : true,
+        billAvailable: condition === 'used' ? billAvailable : true,
+        highlights: highlightsText.split('\n').filter(h => h.trim().length > 0)
+      };
 
-    const updated = addProduct(newProduct);
-    setProducts(updated);
-    
-    // Reset Form
-    setName('');
-    setSellingPrice('');
-    setMrp('');
-    setImagePreview('');
-    setImageUrlInput('');
-    setSuccessMsg(`"${newProduct.name}" has been uploaded successfully! Customers can now view it on the website.`);
+      const updated = updateProduct(editingProductId, updatedFields);
+      setProducts(updated);
+      setSuccessMsg(`"${name}" updated successfully! The updated photo & details are now live on the website.`);
+    } else {
+      // Add new product
+      const newProduct: Product = {
+        id: 'prod-' + Date.now(),
+        name: name.trim(),
+        brand,
+        category: 'mobile',
+        condition,
+        mrp: Number(mrp) || Number(sellingPrice) * 1.15,
+        sellingPrice: Number(sellingPrice),
+        emiAvailable: true,
+        storage,
+        ram,
+        color,
+        images: [finalImage],
+        inStock: true,
+        featured: true,
+        warrantyInfo: condition === 'new' ? warrantyInfo : '6 Months ARONA Care Certified Warranty',
+        batteryHealth: condition === 'used' ? batteryHealth : undefined,
+        grade: condition === 'used' ? grade : undefined,
+        boxAvailable: condition === 'used' ? boxAvailable : true,
+        billAvailable: condition === 'used' ? billAvailable : true,
+        highlights: highlightsText.split('\n').filter(h => h.trim().length > 0),
+        specifications: {
+          screen: 'Dynamic Retina / AMOLED Display',
+          processor: 'High Performance Octa-Core Chipset',
+          camera: 'Pro Multi-Lens Camera System',
+          battery: 'Long Lasting All-Day Battery',
+          os: brand === 'Apple' ? 'iOS' : 'Android',
+          network: '5G High-Speed Cellular'
+        }
+      };
 
-    setTimeout(() => setSuccessMsg(''), 6000);
+      const updated = addProduct(newProduct);
+      setProducts(updated);
+      setSuccessMsg(`"${newProduct.name}" photo & details published successfully! Everyone can view it on the website until you delete it.`);
+    }
+
+    resetForm();
+    setTimeout(() => setSuccessMsg(''), 7000);
   };
 
   const handleDelete = (id: string, productName: string) => {
     if (window.confirm(`Are you sure you want to remove "${productName}" from the store catalog?`)) {
       const updated = deleteProduct(id);
       setProducts(updated);
+      if (editingProductId === id) {
+        resetForm();
+      }
     }
   };
 
@@ -276,15 +426,18 @@ export const AdminPage: React.FC = () => {
     if (window.confirm('Reset catalog to sample default mobiles? This will clear custom items.')) {
       const updated = resetProductsToDefault();
       setProducts(updated);
+      resetForm();
     }
   };
 
   // SECURE OWNER AUTHENTICATION SCREEN
   if (!isAuthenticated) {
+    const hasExistingPassword = Boolean(localStorage.getItem('arona_owner_created_password'));
+
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         
-        {/* Top Simulated SMS Banner */}
+        {/* Top SMS Notification Banner */}
         {smsBanner && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-lg w-full z-50 bg-emerald-500 text-white font-mono text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-400 animate-bounce">
             <span className="font-bold">{smsBanner}</span>
@@ -300,7 +453,47 @@ export const AdminPage: React.FC = () => {
           
           <div>
             <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
-            <p className="text-slate-400 text-xs mt-1">Secure OTP & Owner Phone Login</p>
+            <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
+          </div>
+
+          {/* QUICK-SWITCH TABS */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
+            {hasExistingPassword && (
+              <button
+                type="button"
+                onClick={() => { setAuthMode('PASSWORD'); setAuthError(''); setSmsBanner(''); }}
+                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                  authMode === 'PASSWORD' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Password</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { setAuthMode('PHONE'); setAuthError(''); setSmsBanner(''); }}
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                authMode === 'PHONE' || authMode === 'OTP' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Mobile OTP</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleStartForgotPassword}
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                authMode === 'FORGOT_PHONE' || authMode === 'FORGOT_OTP' || authMode === 'RESET_PASSWORD'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : 'text-amber-400 hover:text-amber-300'
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Forgot Pass?</span>
+            </button>
           </div>
 
           {authError && (
@@ -310,7 +503,7 @@ export const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 1: PHONE NUMBER INPUT */}
+          {/* STEP 1: PHONE NUMBER INPUT (MOBILE OTP LOGIN) */}
           {authMode === 'PHONE' && (
             <form onSubmit={handleSendOtp} className="space-y-4 text-left">
               <div>
@@ -327,7 +520,7 @@ export const AdminPage: React.FC = () => {
                     autoFocus
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1.5">Registered numbers: +91 96XXXXXX06 / +91 97XXXXXX17</p>
+                <p className="text-[11px] text-slate-500 mt-1.5">Authorized owner numbers: +91 96XXXXXX06 / +91 97XXXXXX17</p>
               </div>
 
               <button
@@ -340,14 +533,22 @@ export const AdminPage: React.FC = () => {
             </form>
           )}
 
-          {/* STEP 2: OTP VERIFICATION */}
+          {/* STEP 2: OTP VERIFICATION (MOBILE OTP LOGIN) */}
           {authMode === 'OTP' && (
             <form onSubmit={handleVerifyOtp} className="space-y-4 text-left">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-slate-300 text-xs font-semibold">Enter 6-Digit OTP Code</label>
+                  <label className="text-slate-300 text-xs font-semibold">Enter 6-Digit Mobile OTP</label>
                   <span className="text-emerald-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
                 </div>
+
+                {generatedOtp && (
+                  <div className="mb-3 p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-mono text-center flex items-center justify-center gap-2">
+                    <span>📲 Mobile SMS OTP:</span>
+                    <strong className="text-white bg-slate-950 px-2 py-0.5 rounded border border-emerald-500/50 text-sm tracking-widest">{generatedOtp}</strong>
+                  </div>
+                )}
+
                 <input
                   type="text"
                   maxLength={6}
@@ -378,9 +579,25 @@ export const AdminPage: React.FC = () => {
             </form>
           )}
 
-          {/* STEP 3: PASSWORD LOGIN */}
+          {/* STEP 3: PASSWORD LOGIN WITH PHONE NUMBER FIELD */}
           {authMode === 'PASSWORD' && (
             <form onSubmit={handlePasswordLogin} className="space-y-4 text-left">
+              <div>
+                <label className="block text-slate-300 text-xs font-semibold mb-1">Owner Registered Phone Number</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-sm">+91</span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Enter phone number (e.g. 96XXXXXX06)"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">Authorized owner numbers: +91 96XXXXXX06 / +91 97XXXXXX17</p>
+              </div>
+
               <div>
                 <label className="block text-slate-300 text-xs font-semibold mb-1">Enter Owner Password</label>
                 <input
@@ -402,13 +619,20 @@ export const AdminPage: React.FC = () => {
                 <span>Log In with Password</span>
               </button>
 
-              <div className="flex items-center justify-between text-xs pt-1">
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
                 <button
                   type="button"
-                  onClick={handleRequestOtpMode}
-                  className="text-blue-400 hover:underline"
+                  onClick={() => {
+                    if (phone.trim()) {
+                      handleSendResetOtp({ preventDefault: () => {} } as any);
+                    } else {
+                      handleStartForgotPassword();
+                    }
+                  }}
+                  className="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1"
                 >
-                  Login via OTP instead
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Forgot Password? Reset via SMS OTP</span>
                 </button>
 
                 <button
@@ -416,13 +640,136 @@ export const AdminPage: React.FC = () => {
                   onClick={() => setAuthMode('PHONE')}
                   className="text-slate-400 hover:text-white"
                 >
-                  Change phone
+                  Login via Mobile OTP
                 </button>
               </div>
             </form>
           )}
 
-          {/* STEP 4: CREATE OWNER PASSWORD */}
+          {/* FORGOT PASSWORD - STEP 1: PHONE VERIFICATION */}
+          {authMode === 'FORGOT_PHONE' && (
+            <form onSubmit={handleSendResetOtp} className="space-y-4 text-left">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <span>Enter your registered owner mobile number (+91 96XXXXXX06 / +91 97XXXXXX17) to receive a Password Reset OTP via Mobile SMS.</span>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 text-xs font-semibold mb-1">Registered Mobile Number</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-sm">+91</span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Enter phone number (e.g. 96XXXXXX06)"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-amber-500 transition-all"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <Send className="w-4 h-4" />
+                <span>Send Reset OTP to Mobile</span>
+              </button>
+            </form>
+          )}
+
+          {/* FORGOT PASSWORD - STEP 2: OTP INPUT */}
+          {authMode === 'FORGOT_OTP' && (
+            <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-300 text-xs font-semibold">Enter Password Reset OTP</label>
+                  <span className="text-amber-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
+                </div>
+
+                {generatedOtp && (
+                  <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-mono text-center flex items-center justify-center gap-2">
+                    <span>🔑 Password Reset SMS OTP:</span>
+                    <strong className="text-white bg-slate-950 px-2 py-0.5 rounded border border-amber-500/50 text-sm tracking-widest">{generatedOtp}</strong>
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  placeholder="Enter 6-digit OTP"
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-amber-400 transition-all"
+                  autoFocus
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Verify OTP & Continue</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuthMode('FORGOT_PHONE')}
+                className="w-full text-slate-400 hover:text-white text-xs text-center pt-1"
+              >
+                ← Re-enter phone number
+              </button>
+            </form>
+          )}
+
+          {/* RESET PASSWORD - STEP 3: SET NEW PASSWORD */}
+          {authMode === 'RESET_PASSWORD' && (
+            <form onSubmit={handleSaveResetPassword} className="space-y-4 text-left">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>Mobile Verified! Set your new Owner Password below.</span>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 text-xs font-semibold mb-1">New Owner Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 text-xs font-semibold mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <KeyRound className="w-4 h-4" />
+                <span>Save New Password & Enter Portal</span>
+              </button>
+            </form>
+          )}
+
+          {/* CREATE INITIAL OWNER PASSWORD */}
           {authMode === 'CREATE_PASSWORD' && (
             <form onSubmit={handleCreatePassword} className="space-y-4 text-left">
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-xs flex items-center gap-2">
@@ -488,7 +835,7 @@ export const AdminPage: React.FC = () => {
             </div>
             <div className="text-left">
               <h1 className="font-heading font-black text-xl text-white">ARONA OWNER PORTAL</h1>
-              <p className="text-slate-400 text-xs">Logged in via {maskPhoneNumber(phone || '9659458606')}</p>
+              <p className="text-slate-400 text-xs">Logged in via {maskPhoneNumber(phone || '96XXXXXX06')}</p>
             </div>
           </div>
 
@@ -517,32 +864,43 @@ export const AdminPage: React.FC = () => {
         {/* Success Banner */}
         {successMsg && (
           <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 text-sm animate-fade-in text-left">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
             <span className="font-medium">{successMsg}</span>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* UPLOAD FORM COLUMN */}
+          {/* UPLOAD / EDIT FORM COLUMN */}
           <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit text-left">
             
-            <div className="flex items-center gap-2 text-blue-400 font-heading font-bold text-lg border-b border-slate-800 pb-4">
-              <PlusCircle className="w-5 h-5 text-blue-500" />
-              <h2>Upload Mobile Photo & Details</h2>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2 text-blue-400 font-heading font-bold text-lg">
+                {editingProductId ? <Edit className="w-5 h-5 text-amber-400" /> : <PlusCircle className="w-5 h-5 text-blue-500" />}
+                <h2>{editingProductId ? 'Edit Mobile Photo & Details' : 'Upload Mobile Photo & Details'}</h2>
+              </div>
+
+              {editingProductId && (
+                <button
+                  onClick={resetForm}
+                  className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-mono bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700"
+                >
+                  <RotateCcw className="w-3 h-3" /> Cancel Edit
+                </button>
+              )}
             </div>
 
-            <form onSubmit={handleAddProduct} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
               
               {/* Photo Upload Section */}
               <div className="space-y-2">
-                <label className="block text-slate-300 font-medium">Device Photo (Upload file or URL)</label>
+                <label className="block text-slate-300 font-medium">Device Photo (Upload compressed file or URL)</label>
                 
                 <div className="grid grid-cols-1 gap-3">
                   <label className="border-2 border-dashed border-slate-700 hover:border-blue-500 bg-slate-950/60 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all">
                     <Upload className="w-6 h-6 text-blue-400 mb-1" />
                     <span className="text-slate-300 font-semibold">Choose photo from phone / PC</span>
-                    <span className="text-slate-500 text-[10px]">PNG, JPG, WEBP formats</span>
+                    <span className="text-slate-500 text-[10px]">PNG, JPG, WEBP formats (Auto-compressed for permanent storage)</span>
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -567,7 +925,7 @@ export const AdminPage: React.FC = () => {
                     <img src={imagePreview} alt="Preview" className="w-14 h-14 object-cover rounded-lg bg-slate-900" />
                     <div className="text-slate-300">
                       <p className="font-semibold text-emerald-400 text-xs">Photo Attached</p>
-                      <p className="text-[10px] text-slate-500">Ready to display to customers</p>
+                      <p className="text-[10px] text-slate-500">Will stay permanently until you delete it</p>
                     </div>
                   </div>
                 )}
@@ -755,10 +1113,14 @@ export const AdminPage: React.FC = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+                className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm ${
+                  editingProductId
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30'
+                    : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                }`}
               >
-                <PlusCircle className="w-5 h-5" />
-                <span>Publish Mobile to Store</span>
+                {editingProductId ? <Edit className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
+                <span>{editingProductId ? 'Update Mobile & Publish Photo' : 'Publish Mobile to Store'}</span>
               </button>
 
             </form>
@@ -770,7 +1132,7 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl p-4">
               <div>
                 <h3 className="font-heading font-bold text-white text-base">Active Store Catalog</h3>
-                <p className="text-slate-400 text-xs">{products.length} Mobiles listed for customers</p>
+                <p className="text-slate-400 text-xs">{products.length} Mobiles listed for customers (Persisted in Website)</p>
               </div>
 
               <button
@@ -788,7 +1150,9 @@ export const AdminPage: React.FC = () => {
               {products.map((prod) => (
                 <div 
                   key={prod.id} 
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 flex items-center justify-between gap-4 transition-all"
+                  className={`bg-slate-900 border rounded-2xl p-4 flex items-center justify-between gap-4 transition-all ${
+                    editingProductId === prod.id ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-800 hover:border-slate-700'
+                  }`}
                 >
                   <div className="flex items-center gap-3">
                     <img 
@@ -818,6 +1182,15 @@ export const AdminPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleEditClick(prod)}
+                      className="p-2 rounded-xl bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/40 text-slate-300 hover:text-amber-400 transition-all flex items-center gap-1 text-xs font-medium"
+                      title="Edit Mobile Details & Photo"
+                    >
+                      <Edit className="w-4 h-4 text-amber-400" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </button>
+
                     <button
                       onClick={() => handleToggleStock(prod.id, prod.inStock)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${

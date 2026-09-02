@@ -37,16 +37,6 @@ export const Footer: React.FC = () => {
                   <Instagram className="w-4 h-4" />
                 </a>
               )}
-              {BUSINESS_CONFIG.socials.facebook && (
-                <a href={BUSINESS_CONFIG.socials.facebook} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 transition-all">
-                  <Facebook className="w-4 h-4" />
-                </a>
-              )}
-              {BUSINESS_CONFIG.socials.youtube && (
-                <a href={BUSINESS_CONFIG.socials.youtube} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 transition-all">
-                  <Youtube className="w-4 h-4" />
-                </a>
-              )}
               <a href={waUrl} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all">
                 <MessageSquare className="w-4 h-4" />
               </a>

@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ShieldCheck, BatteryCharging, CheckCircle2, MessageSquare, Sparkles, RefreshCw, ArrowLeft } from 'lucide-react';
-import { SAMPLE_PRODUCTS } from '../data/products';
+import { getStoredProducts } from '../data/productStore';
 import { getWhatsAppUrl } from '../config/business';
+import { Product } from '../types';
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const product = SAMPLE_PRODUCTS.find(p => p.id === id) || SAMPLE_PRODUCTS[0];
+  const [products, setProducts] = useState<Product[]>(getStoredProducts);
   const [activeImgIdx, setActiveImgIdx] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setProducts(getStoredProducts());
+    window.addEventListener('arona_products_updated', handleUpdate);
+    return () => window.removeEventListener('arona_products_updated', handleUpdate);
+  }, []);
+
+  const product = products.find(p => p.id === id) || products[0];
 
   const isUsed = product.condition === 'used';
   const waMessage = isUsed
