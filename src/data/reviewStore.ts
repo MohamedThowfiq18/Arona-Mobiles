@@ -1,5 +1,6 @@
 import { Testimonial } from '../types';
 import { SAMPLE_REVIEWS } from './reviews';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 const STORAGE_KEY = 'arona_customer_reviews_v1';
 
@@ -8,7 +9,7 @@ const STORAGE_KEY = 'arona_customer_reviews_v1';
  */
 export function getStoredReviews(): Testimonial[] {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = safeLocalStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -16,7 +17,7 @@ export function getStoredReviews(): Testimonial[] {
       }
     }
   } catch (error) {
-    console.error('Failed to read reviews from localStorage:', error);
+    console.error('Failed to read reviews:', error);
   }
   
   // Save initial default reviews
@@ -29,10 +30,12 @@ export function getStoredReviews(): Testimonial[] {
  */
 export function saveReviews(reviews: Testimonial[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
-    window.dispatchEvent(new Event('arona_reviews_updated'));
+    safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('arona_reviews_updated'));
+    }
   } catch (error) {
-    console.error('Failed to save reviews to localStorage:', error);
+    console.error('Failed to save reviews:', error);
   }
 }
 

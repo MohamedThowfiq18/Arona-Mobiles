@@ -23,6 +23,7 @@ import {
 import { Product, ProductCondition, UsedGrade } from '../types';
 import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProductsToDefault } from '../data/productStore';
 import { compressImage } from '../utils/imageCompressor';
+import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
@@ -37,14 +38,14 @@ const ALLOWED_PHONE_NUMBERS = [
 export const AdminPage: React.FC = () => {
   // Authentication Flow State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('arona_owner_auth') === 'true';
+    return safeSessionStorage.getItem('arona_owner_auth') === 'true';
   });
 
   // Default to PASSWORD if a password was previously set, else PHONE
   const [authMode, setAuthMode] = useState<
     'PHONE' | 'OTP' | 'PASSWORD' | 'CREATE_PASSWORD' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'RESET_PASSWORD'
   >(() => {
-    const existingPassword = localStorage.getItem('arona_owner_created_password');
+    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
     return existingPassword ? 'PASSWORD' : 'PHONE';
   });
 
@@ -118,7 +119,7 @@ export const AdminPage: React.FC = () => {
     setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)}: Your OTP is ${code}`);
 
     // Check if owner already created a password
-    const existingPassword = localStorage.getItem('arona_owner_created_password');
+    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
     if (existingPassword) {
       setAuthMode('PASSWORD');
     } else {
@@ -140,7 +141,7 @@ export const AdminPage: React.FC = () => {
     e.preventDefault();
     if (otpInput.trim() === generatedOtp) {
       setAuthError('');
-      const existingPassword = localStorage.getItem('arona_owner_created_password');
+      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
       if (existingPassword) {
         completeLogin();
       } else {
@@ -164,7 +165,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    const savedPassword = localStorage.getItem('arona_owner_created_password');
+    const savedPassword = safeLocalStorage.getItem('arona_owner_created_password');
     if (passwordInput === savedPassword) {
       completeLogin();
     } else {
@@ -184,7 +185,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    localStorage.setItem('arona_owner_created_password', newPassword);
+    safeLocalStorage.setItem('arona_owner_created_password', newPassword);
     completeLogin();
   };
 
@@ -237,22 +238,22 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    localStorage.setItem('arona_owner_created_password', newPassword);
+    safeLocalStorage.setItem('arona_owner_created_password', newPassword);
     setSuccessMsg('Owner password reset successfully! Welcome to the ARONA Owner Portal.');
     completeLogin();
   };
 
   const completeLogin = () => {
     setIsAuthenticated(true);
-    sessionStorage.setItem('arona_owner_auth', 'true');
+    safeSessionStorage.setItem('arona_owner_auth', 'true');
     setAuthError('');
     setSmsBanner('');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    sessionStorage.removeItem('arona_owner_auth');
-    const existingPassword = localStorage.getItem('arona_owner_created_password');
+    safeSessionStorage.removeItem('arona_owner_auth');
+    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
     setAuthMode(existingPassword ? 'PASSWORD' : 'PHONE');
     setPhone('');
     setOtpInput('');
@@ -432,7 +433,7 @@ export const AdminPage: React.FC = () => {
 
   // SECURE OWNER AUTHENTICATION SCREEN
   if (!isAuthenticated) {
-    const hasExistingPassword = Boolean(localStorage.getItem('arona_owner_created_password'));
+    const hasExistingPassword = Boolean(safeLocalStorage.getItem('arona_owner_created_password'));
 
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">

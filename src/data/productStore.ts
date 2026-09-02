@@ -1,6 +1,7 @@
 import { Product } from '../types';
 import { SAMPLE_PRODUCTS } from './products';
 import { fetchCloudProducts, pushCloudProducts } from './cloudStore';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 const STORAGE_KEY = 'arona_mobiles_products_v1';
 
@@ -9,7 +10,7 @@ const STORAGE_KEY = 'arona_mobiles_products_v1';
  */
 export function getStoredProducts(): Product[] {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = safeLocalStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -17,7 +18,7 @@ export function getStoredProducts(): Product[] {
       }
     }
   } catch (error) {
-    console.error('Failed to read products from localStorage:', error);
+    console.error('Failed to read products from storage:', error);
   }
   
   // Fallback to sample products & save initial set
@@ -30,8 +31,10 @@ export function getStoredProducts(): Product[] {
  */
 export function saveProducts(products: Product[], syncToCloud = true): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-    window.dispatchEvent(new Event('arona_products_updated'));
+    safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('arona_products_updated'));
+    }
     
     if (syncToCloud) {
       pushCloudProducts(products).catch(err => console.warn('Cloud sync error:', err));
@@ -86,12 +89,14 @@ export async function syncProductsWithCloud(): Promise<Product[]> {
   try {
     const cloudProducts = await fetchCloudProducts();
     if (cloudProducts && cloudProducts.length > 0) {
-      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const localRaw = safeLocalStorage.getItem(STORAGE_KEY);
       const cloudRaw = JSON.stringify(cloudProducts);
       
       if (localRaw !== cloudRaw) {
-        localStorage.setItem(STORAGE_KEY, cloudRaw);
-        window.dispatchEvent(new Event('arona_products_updated'));
+        safeLocalStorage.setItem(STORAGE_KEY, cloudRaw);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('arona_products_updated'));
+        }
       }
       return cloudProducts;
     }
