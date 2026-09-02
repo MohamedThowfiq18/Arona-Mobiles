@@ -1,5 +1,6 @@
 import { Product } from '../types';
 import { SAMPLE_PRODUCTS } from './products';
+import { fetchCloudProducts, pushCloudProducts } from './cloudStore';
 
 const STORAGE_KEY = 'arona_mobiles_products_v1';
 
@@ -25,14 +26,18 @@ export function getStoredProducts(): Product[] {
 }
 
 /**
- * Save products array to localStorage and notify listeners
+ * Save products array to localStorage, trigger local event, and push to cloud
  */
-export function saveProducts(products: Product[]): void {
+export function saveProducts(products: Product[], syncToCloud = true): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
     window.dispatchEvent(new Event('arona_products_updated'));
+    
+    if (syncToCloud) {
+      pushCloudProducts(products).catch(err => console.warn('Cloud sync error:', err));
+    }
   } catch (error) {
-    console.error('Failed to save products to localStorage:', error);
+    console.error('Failed to save products:', error);
   }
 }
 
@@ -72,4 +77,42 @@ export function deleteProduct(id: string): Product[] {
 export function resetProductsToDefault(): Product[] {
   saveProducts(SAMPLE_PRODUCTS);
   return SAMPLE_PRODUCTS;
+}
+
+/**
+ * Synchronize local products with global cloud store so all devices worldwide show identical data
+ */
+export async function syncProductsWithCloud(): Promise<Product[]> {
+  const cloudProducts = await fetchCloudProducts();
+  if (cloudProducts && cloudProducts.length > 0) {
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    const cloudRaw = JSON.stringify(cloudProducts);
+    
+    if (localRaw !== cloudRaw) {
+      localStorage.setItem(STORAGE_KEY, cloudRaw);
+      window.dispatchEvent(new Event('arona_products_updated'));
+    }
+    return cloudProducts;
+  } else {
+    // If cloud has no products yet, push local catalog to cloud
+    const currentLocal = getStoredProducts();
+    pushCloudProducts(currentLocal);
+    return currentLocal;
+  }
+}
+
+// Auto-sync on window load and periodically
+if (typeof window !== 'undefined') {
+  // Sync on startup
+  setTimeout(() => syncProductsWithCloud(), 100);
+
+  // Sync on tab focus
+  window.addEventListener('focus', () => {
+    syncProductsWithCloud();
+  });
+
+  // Sync every 10 seconds
+  setInterval(() => {
+    syncProductsWithCloud();
+  }, 10000);
 }

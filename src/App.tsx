@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Product } from './types';
-import { getStoredProducts } from './data/productStore';
+import { getStoredProducts, syncProductsWithCloud } from './data/productStore';
 import { Navbar } from './components/Navbar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
@@ -63,6 +63,9 @@ export function App() {
   const [products, setProducts] = useState<Product[]>(getStoredProducts);
 
   useEffect(() => {
+    // Initial Cloud Sync across all devices
+    syncProductsWithCloud();
+
     const handleUpdate = () => {
       setProducts(getStoredProducts());
     };
