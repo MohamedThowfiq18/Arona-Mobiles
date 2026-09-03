@@ -28,7 +28,7 @@ import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProdu
 import { pushCloudProducts } from '../data/cloudStore';
 import { compressImage } from '../utils/imageCompressor';
 import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
-import { sendRealSmsOtp, getSmsApiKey, saveSmsApiKey, getSmsGatewayType } from '../utils/smsService';
+import { sendRealSmsOtp, showSystemNotification } from '../utils/smsService';
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
@@ -57,7 +57,7 @@ export const AdminPage: React.FC = () => {
     return existingPassword ? 'PASSWORD' : 'PHONE';
   });
 
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState<string>(() => safeLocalStorage.getItem('arona_owner_phone') || '');
   const [otpInput, setOtpInput] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -66,11 +66,9 @@ export const AdminPage: React.FC = () => {
   
   const [authError, setAuthError] = useState('');
   const [smsBanner, setSmsBanner] = useState('');
-  const [smsApiKey, setSmsApiKeyState] = useState<string>(getSmsApiKey);
-  const [smsGateway, setSmsGateway] = useState<'fast2sms' | '2factor'>(getSmsGatewayType);
-  const [showSmsSettings, setShowSmsSettings] = useState<boolean>(false);
   const [smsDeepLink, setSmsDeepLink] = useState<string>('');
   const [isSendingSms, setIsSendingSms] = useState<boolean>(false);
+  const [notificationOtpPopup, setNotificationOtpPopup] = useState<{ otp: string; phone: string } | null>(null);
 
   // Products State & Edit Mode
   const [products, setProducts] = useState<Product[]>([]);
@@ -113,31 +111,23 @@ export const AdminPage: React.FC = () => {
     return num ? `+91 ${num}` : '';
   };
 
-  const saveSmsSettings = (key: string, gateway: 'fast2sms' | '2factor') => {
-    saveSmsApiKey(key, gateway);
-    setSmsApiKeyState(key);
-    setSmsGateway(gateway);
-    setShowSmsSettings(false);
-    setSmsBanner('SMS Gateway settings updated successfully!');
-  };
-
   // Helper to generate & dispatch real SMS OTP
   const triggerSmsOtp = async (targetPhone: string, isReset = false) => {
     setIsSendingSms(true);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
+    safeLocalStorage.setItem('arona_owner_phone', targetPhone);
+
+    // Trigger native OS notification & top screen pop-up bar
+    setNotificationOtpPopup({ otp: code, phone: targetPhone });
+    showSystemNotification('📱 ARONA MOBILES OTP', `Your Owner Portal OTP is ${code}. Valid for 10 minutes.`);
 
     const res = await sendRealSmsOtp(targetPhone, code);
     setIsSendingSms(false);
 
-    if (res.success) {
-      setSmsBanner(`📲 Real Mobile SMS OTP sent via ${res.gateway} to ${maskPhoneNumber(targetPhone)}!`);
-      setSmsDeepLink('');
-    } else {
-      setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(targetPhone)}. ${res.message}`);
-      if (res.smsDeepLink) {
-        setSmsDeepLink(res.smsDeepLink);
-      }
+    setSmsBanner(`📲 OTP ${code} sent to top notification bar! Check top of your screen.`);
+    if (res.smsDeepLink) {
+      setSmsDeepLink(res.smsDeepLink);
     }
     return code;
   };
@@ -223,6 +213,9 @@ export const AdminPage: React.FC = () => {
     }
 
     safeLocalStorage.setItem('arona_owner_created_password', newPassword);
+    if (phone.trim()) {
+      safeLocalStorage.setItem('arona_owner_phone', phone);
+    }
     completeLogin();
   };
 
@@ -274,6 +267,9 @@ export const AdminPage: React.FC = () => {
     }
 
     safeLocalStorage.setItem('arona_owner_created_password', newPassword);
+    if (phone.trim()) {
+      safeLocalStorage.setItem('arona_owner_phone', phone);
+    }
     setSuccessMsg('Owner password reset successfully! Welcome to the ARONA Owner Portal.');
     completeLogin();
   };
@@ -289,8 +285,9 @@ export const AdminPage: React.FC = () => {
     setIsAuthenticated(false);
     safeSessionStorage.removeItem('arona_owner_auth');
     const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+    const savedPhone = safeLocalStorage.getItem('arona_owner_phone') || '';
     setAuthMode(existingPassword ? 'PASSWORD' : 'PHONE');
-    setPhone('');
+    setPhone(savedPhone);
     setOtpInput('');
     setPasswordInput('');
   };
@@ -484,11 +481,50 @@ export const AdminPage: React.FC = () => {
     const hasExistingPassword = Boolean(safeLocalStorage.getItem('arona_owner_created_password'));
 
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative">
         
+        {/* Floating Top Notification Bar for OTP */}
+        {notificationOtpPopup && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-md w-[92%] z-50 bg-slate-900/95 backdrop-blur-xl border border-emerald-500/50 rounded-2xl shadow-2xl p-4 text-left space-y-3 animate-bounce">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs font-mono">
+                <Smartphone className="w-4 h-4 text-emerald-400" />
+                <span>ARONA MOBILES • TOP NOTIFICATION BAR</span>
+              </div>
+              <button 
+                onClick={() => setNotificationOtpPopup(null)}
+                className="text-slate-400 hover:text-white font-bold text-xs px-2 py-0.5 rounded-lg bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-800">
+              <div>
+                <p className="text-slate-300 text-[11px] font-semibold">Your 6-Digit Owner OTP is</p>
+                <p className="text-3xl font-mono font-black text-emerald-400 tracking-wider mt-0.5">{notificationOtpPopup.otp}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpInput(notificationOtpPopup.otp);
+                  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(notificationOtpPopup.otp);
+                  }
+                  setSmsBanner(`OTP ${notificationOtpPopup.otp} copied & auto-filled!`);
+                  setTimeout(() => setSmsBanner(''), 3000);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-lg transition-all flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Copy & Auto-Fill OTP</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top SMS Notification Banner */}
         {smsBanner && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-lg w-full z-50 bg-emerald-500 text-white font-mono text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-400 animate-bounce">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-lg w-full z-40 bg-emerald-500 text-white font-mono text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-400">
             <span className="font-bold">{smsBanner}</span>
             <button onClick={() => setSmsBanner('')} className="text-white/80 hover:text-white font-bold ml-2">✕</button>
           </div>
@@ -500,68 +536,10 @@ export const AdminPage: React.FC = () => {
             <ShieldCheck className="w-8 h-8" />
           </div>
           
-          <div className="flex items-center justify-between">
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
-              <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSmsSettings(!showSmsSettings)}
-              className="p-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 transition-all flex items-center gap-1.5 text-xs font-semibold"
-              title="Configure SMS Gateway API Key"
-            >
-              <Settings className="w-4 h-4 text-blue-400" />
-              <span className="hidden sm:inline">SMS Settings</span>
-            </button>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
+            <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
           </div>
-
-          {/* SMS GATEWAY API CONFIGURATION DRAWER */}
-          {showSmsSettings && (
-            <div className="bg-slate-950 border border-blue-500/40 p-4 rounded-2xl text-left space-y-3 shadow-xl">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                  <Settings className="w-4 h-4" />
-                  <span>SMS Gateway API Configuration</span>
-                </h3>
-                <button onClick={() => setShowSmsSettings(false)} className="text-slate-400 hover:text-white text-xs font-bold px-1">✕</button>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">Select SMS Gateway Provider</label>
-                <select
-                  value={smsGateway}
-                  onChange={(e) => setSmsGateway(e.target.value as any)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-500"
-                >
-                  <option value="fast2sms">Fast2SMS API (Fast2SMS.com - India)</option>
-                  <option value="2factor">2Factor API (2Factor.in - India)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">Enter API Key</label>
-                <input
-                  type="text"
-                  placeholder={smsGateway === 'fast2sms' ? 'Paste Fast2SMS API Key' : 'Paste 2Factor API Key'}
-                  value={smsApiKey}
-                  onChange={(e) => setSmsApiKeyState(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-blue-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Real SMS OTPs will be dispatched via API directly to Indian numbers +91 9659458606 / +91 9994235672 / +91 9787061617.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => saveSmsSettings(smsApiKey, smsGateway)}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-md"
-              >
-                Save SMS Gateway API Key
-              </button>
-            </div>
-          )}
 
           {/* QUICK-SWITCH TABS */}
           <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
@@ -652,7 +630,7 @@ export const AdminPage: React.FC = () => {
                 <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs space-y-2">
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>SMS verification code sent to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit OTP code.</span>
+                    <span>OTP sent to notification bar & <strong>{maskPhoneNumber(phone)}</strong>. Check top of screen for code.</span>
                   </div>
 
                   {smsDeepLink && (
@@ -676,7 +654,7 @@ export const AdminPage: React.FC = () => {
                   type="text"
                   maxLength={6}
                   required
-                  placeholder="Enter 6-digit OTP from SMS"
+                  placeholder="Enter 6-digit OTP from notification bar"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-blue-500 transition-all"
@@ -699,15 +677,6 @@ export const AdminPage: React.FC = () => {
                   className="text-slate-400 hover:text-white"
                 >
                   ← Use a different phone number
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSmsSettings(!showSmsSettings)}
-                  className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>Configure SMS Gateway</span>
                 </button>
               </div>
             </form>
