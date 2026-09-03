@@ -36,23 +36,39 @@ let masterMemoryCache: MasterDataPayload = {
   sessions: []
 };
 
+// Helper function to merge sample defaults with cloud products
+function mergeWithSampleDefaults(cloudProducts: Product[]): Product[] {
+  if (!Array.isArray(cloudProducts) || cloudProducts.length === 0) {
+    return SAMPLE_PRODUCTS;
+  }
+  // Start with cloud products
+  const merged = [...cloudProducts];
+  // Ensure default sample items exist if not already present by ID
+  for (const sample of SAMPLE_PRODUCTS) {
+    if (!merged.some(p => p.id === sample.id)) {
+      merged.push(sample);
+    }
+  }
+  return merged;
+}
+
 // Initial Cloud Hydration
 if (typeof window !== 'undefined') {
   fetchCloudMasterData().then(cloudData => {
     if (cloudData) {
       if (Array.isArray(cloudData.products) && cloudData.products.length > 0) {
-        masterMemoryCache.products = cloudData.products;
+        masterMemoryCache.products = mergeWithSampleDefaults(cloudData.products);
       }
       if (cloudData.businessConfig && cloudData.businessConfig.phone) {
         masterMemoryCache.businessConfig = cloudData.businessConfig;
       }
-      if (Array.isArray(cloudData.offers)) {
+      if (Array.isArray(cloudData.offers) && cloudData.offers.length > 0) {
         masterMemoryCache.offers = cloudData.offers;
       }
-      if (Array.isArray(cloudData.accessories)) {
+      if (Array.isArray(cloudData.accessories) && cloudData.accessories.length > 0) {
         masterMemoryCache.accessories = cloudData.accessories;
       }
-      if (Array.isArray(cloudData.services)) {
+      if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
         masterMemoryCache.services = cloudData.services;
       }
       if (Array.isArray(cloudData.sessions)) {
@@ -65,7 +81,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('arona_master_data_updated', () => {
     fetchCloudMasterData().then(data => {
       if (data) {
-        if (data.products) masterMemoryCache.products = data.products;
+        if (data.products && Array.isArray(data.products)) {
+          masterMemoryCache.products = mergeWithSampleDefaults(data.products);
+        }
         if (data.businessConfig) masterMemoryCache.businessConfig = data.businessConfig;
         if (data.offers) masterMemoryCache.offers = data.offers;
         if (data.accessories) masterMemoryCache.accessories = data.accessories;
