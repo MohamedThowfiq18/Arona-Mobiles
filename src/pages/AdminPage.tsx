@@ -68,7 +68,6 @@ export const AdminPage: React.FC = () => {
   const [smsBanner, setSmsBanner] = useState('');
   const [smsDeepLink, setSmsDeepLink] = useState<string>('');
   const [isSendingSms, setIsSendingSms] = useState<boolean>(false);
-  const [notificationOtpPopup, setNotificationOtpPopup] = useState<{ otp: string; phone: string } | null>(null);
 
   // Products State & Edit Mode
   const [products, setProducts] = useState<Product[]>([]);
@@ -118,17 +117,21 @@ export const AdminPage: React.FC = () => {
     setGeneratedOtp(code);
     safeLocalStorage.setItem('arona_owner_phone', targetPhone);
 
-    // Trigger native OS notification & top screen pop-up bar
-    setNotificationOtpPopup({ otp: code, phone: targetPhone });
+    // Trigger native OS notification in smartphone / system notification bar
     showSystemNotification('📱 ARONA MOBILES OTP', `Your Owner Portal OTP is ${code}. Valid for 10 minutes.`);
 
     const res = await sendRealSmsOtp(targetPhone, code);
     setIsSendingSms(false);
 
-    setSmsBanner(`📲 OTP ${code} sent to top notification bar! Check top of your screen.`);
     if (res.smsDeepLink) {
       setSmsDeepLink(res.smsDeepLink);
+      // Automatically attempt native mobile SMS app trigger on mobile browsers
+      if (typeof window !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+        window.location.href = res.smsDeepLink;
+      }
     }
+
+    setSmsBanner(`📲 OTP SMS sent to ${maskPhoneNumber(targetPhone)}! Check your device SMS app / Notification bar.`);
     return code;
   };
 
@@ -483,45 +486,6 @@ export const AdminPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative">
         
-        {/* Floating Top Notification Bar for OTP */}
-        {notificationOtpPopup && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-md w-[92%] z-50 bg-slate-900/95 backdrop-blur-xl border border-emerald-500/50 rounded-2xl shadow-2xl p-4 text-left space-y-3 animate-bounce">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs font-mono">
-                <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>ARONA MOBILES • TOP NOTIFICATION BAR</span>
-              </div>
-              <button 
-                onClick={() => setNotificationOtpPopup(null)}
-                className="text-slate-400 hover:text-white font-bold text-xs px-2 py-0.5 rounded-lg bg-slate-800"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-800">
-              <div>
-                <p className="text-slate-300 text-[11px] font-semibold">Your 6-Digit Owner OTP is</p>
-                <p className="text-3xl font-mono font-black text-emerald-400 tracking-wider mt-0.5">{notificationOtpPopup.otp}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpInput(notificationOtpPopup.otp);
-                  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                    navigator.clipboard.writeText(notificationOtpPopup.otp);
-                  }
-                  setSmsBanner(`OTP ${notificationOtpPopup.otp} copied & auto-filled!`);
-                  setTimeout(() => setSmsBanner(''), 3000);
-                }}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs shadow-lg transition-all flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Copy & Auto-Fill OTP</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Top SMS Notification Banner */}
         {smsBanner && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-lg w-full z-40 bg-emerald-500 text-white font-mono text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-400">
@@ -630,12 +594,12 @@ export const AdminPage: React.FC = () => {
                 <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs space-y-2">
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>OTP sent to notification bar & <strong>{maskPhoneNumber(phone)}</strong>. Check top of screen for code.</span>
+                    <span>OTP sent via SMS & system notification to <strong>{maskPhoneNumber(phone)}</strong>. Check your phone's notification bar / SMS app.</span>
                   </div>
 
                   {smsDeepLink && (
                     <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-300">On mobile? Open your phone's SMS app:</span>
+                      <span className="text-[11px] text-slate-300">Open mobile phone's SMS app:</span>
                       <a
                         href={smsDeepLink}
                         target="_blank"
@@ -643,7 +607,7 @@ export const AdminPage: React.FC = () => {
                         className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
                       >
                         <MessageSquare className="w-3 h-3" />
-                        <span>Send SMS via Mobile App</span>
+                        <span>Open Mobile SMS App</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
@@ -654,7 +618,7 @@ export const AdminPage: React.FC = () => {
                   type="text"
                   maxLength={6}
                   required
-                  placeholder="Enter 6-digit OTP from notification bar"
+                  placeholder="Enter 6-digit OTP from SMS"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-blue-500 transition-all"
