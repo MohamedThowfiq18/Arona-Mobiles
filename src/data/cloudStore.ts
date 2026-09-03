@@ -1,8 +1,18 @@
 import { Product, BusinessConfigData, PromoOffer, AccessoryItem, ServiceItem } from '../types';
 
-// Global Cloud Object Endpoint for ARONA MOBILES Master Database
-const CLOUD_OBJECT_ID = 'ff808181a061cdc401a0635da4b7062d';
-const CLOUD_URL = `https://api.restful-api.dev/objects/${CLOUD_OBJECT_ID}`;
+const PRIMARY_CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a061cdc401a0635da4b7062d';
+
+function getCloudEndpoints(): string[] {
+  const customUrl = typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_CLOUD_DB_URL : '';
+  const list: string[] = [];
+  if (customUrl) list.push(customUrl);
+  list.push(
+    PRIMARY_CLOUD_URL,
+    'https://api.restful-api.dev/objects/ff808181a061cdc401a065db724b7063e',
+    'https://api.restful-api.dev/objects/ff808181a061cdc401a067ef894b7065f'
+  );
+  return list;
+}
 
 export interface MasterDataPayload {
   products: Product[];
@@ -23,18 +33,22 @@ export interface MasterDataPayload {
  * Fetch the full master payload from global cloud database
  */
 export async function fetchCloudMasterData(): Promise<MasterDataPayload | null> {
-  try {
-    const res = await fetch(CLOUD_URL, { 
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (json?.data && typeof json.data === 'object') {
-      return json.data as MasterDataPayload;
+  const endpoints = getCloudEndpoints();
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data && typeof json.data === 'object' && Array.isArray(json.data.products)) {
+          return json.data as MasterDataPayload;
+        }
+      }
+    } catch (error) {
+      console.warn(`Master cloud fetch attempt failed for ${url}:`, error);
     }
-  } catch (error) {
-    console.warn('Master cloud store fetch warning:', error);
   }
   return null;
 }
@@ -48,19 +62,22 @@ export async function pushCloudMasterData(payload: MasterDataPayload): Promise<b
     lastUpdated: Date.now()
   };
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const res = await fetch(CLOUD_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'arona_mobiles_master_database',
-          data: fullPayload
-        })
-      });
-      if (res.ok) return true;
-    } catch (error) {
-      console.warn(`Master cloud store update attempt ${attempt} failed:`, error);
+  const endpoints = getCloudEndpoints();
+  for (const url of endpoints) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'arona_mobiles_master_database',
+            data: fullPayload
+          })
+        });
+        if (res.ok) return true;
+      } catch (error) {
+        console.warn(`Master cloud push attempt ${attempt} failed for ${url}:`, error);
+      }
     }
   }
   return false;
