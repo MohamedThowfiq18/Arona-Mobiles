@@ -46,10 +46,10 @@ export function cleanIndianPhone(phone: string): string {
 }
 
 /**
- * Dispatch native system notification in OS notification bar & trigger device vibration
+ * Dispatch native system notification in OS notification bar & trigger device vibration safely on iOS/Android/Desktop
  */
 export function showSystemNotification(title: string, body: string): void {
-  if (typeof window !== 'undefined' && 'Notification' in window) {
+  if (typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined') {
     try {
       if (Notification.permission === 'granted') {
         new Notification(title, {
@@ -58,18 +58,29 @@ export function showSystemNotification(title: string, body: string): void {
           tag: 'arona_otp_notification'
         });
       } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            new Notification(title, {
-              body,
-              icon: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=128&auto=format&fit=crop&q=80',
-              tag: 'arona_otp_notification'
-            });
+        try {
+          const req = Notification.requestPermission((permission) => {
+            if (permission === 'granted') {
+              try {
+                new Notification(title, { body });
+              } catch (e) {}
+            }
+          });
+          if (req && typeof (req as any).then === 'function') {
+            (req as any).then((permission: string) => {
+              if (permission === 'granted') {
+                try {
+                  new Notification(title, { body });
+                } catch (e) {}
+              }
+            }).catch(() => {});
           }
-        });
+        } catch (e) {
+          console.warn('Permission request fallback notice:', e);
+        }
       }
     } catch (e) {
-      console.warn('Native notification error:', e);
+      console.warn('Native notification notice:', e);
     }
   }
 
@@ -77,7 +88,7 @@ export function showSystemNotification(title: string, body: string): void {
     try {
       navigator.vibrate([200, 100, 200]);
     } catch (e) {
-      // ignore vibration error
+      // ignore vibration notice
     }
   }
 }
