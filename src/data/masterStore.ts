@@ -192,6 +192,49 @@ function notifyUpdate(eventName: string) {
   }
 }
 
+const PASSWORD_STORAGE_KEY = 'arona_owner_created_password';
+
+/**
+ * 6. Owner Password Cloud Sync Management
+ */
+export function getStoredOwnerPassword(): string {
+  return safeLocalStorage.getItem(PASSWORD_STORAGE_KEY) || '';
+}
+
+export function saveOwnerPassword(password: string, syncToCloud = true): void {
+  try {
+    safeLocalStorage.setItem(PASSWORD_STORAGE_KEY, password);
+    notifyUpdate('arona_auth_updated');
+    if (syncToCloud) {
+      pushCurrentMasterDataToCloud().catch(e => console.warn('Password cloud sync err:', e));
+    }
+  } catch (error) {
+    console.error('Failed to save owner password:', error);
+  }
+}
+
+/**
+ * Dispatch Active OTP to global cloud database for cross-device notification
+ */
+export async function pushActiveOtpToCloud(code: string, phone: string): Promise<boolean> {
+  const current = await fetchCloudMasterData();
+  const updatedPayload: MasterDataPayload = {
+    ...(current || {
+      products: getStoredProducts(),
+      businessConfig: getStoredBusinessConfig(),
+      offers: getStoredOffers(),
+      accessories: getStoredAccessories(),
+      services: getStoredServices()
+    }),
+    activeOtp: {
+      code,
+      phone,
+      timestamp: Date.now()
+    }
+  };
+  return pushCloudMasterData(updatedPayload);
+}
+
 /**
  * Gather current state and push full payload to cloud
  */
@@ -201,7 +244,8 @@ export async function pushCurrentMasterDataToCloud(): Promise<boolean> {
     businessConfig: getStoredBusinessConfig(),
     offers: getStoredOffers(),
     accessories: getStoredAccessories(),
-    services: getStoredServices()
+    services: getStoredServices(),
+    ownerPassword: getStoredOwnerPassword()
   };
   return pushCloudMasterData(payload);
 }
@@ -214,6 +258,16 @@ export async function syncMasterDataWithCloud(): Promise<void> {
     const cloudPayload = await fetchCloudMasterData();
     if (cloudPayload && typeof cloudPayload === 'object') {
       let updatedAny = false;
+
+      // Sync Cloud Owner Password to Local Device Storage
+      if (cloudPayload.ownerPassword && typeof cloudPayload.ownerPassword === 'string') {
+        const localPwd = safeLocalStorage.getItem(PASSWORD_STORAGE_KEY);
+        if (localPwd !== cloudPayload.ownerPassword) {
+          safeLocalStorage.setItem(PASSWORD_STORAGE_KEY, cloudPayload.ownerPassword);
+          notifyUpdate('arona_auth_updated');
+          updatedAny = true;
+        }
+      }
 
       if (cloudPayload.products && Array.isArray(cloudPayload.products) && cloudPayload.products.length > 0) {
         const rawLocal = safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY);

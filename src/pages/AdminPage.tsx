@@ -35,7 +35,9 @@ import {
   getStoredBusinessConfig, 
   saveBusinessConfig, 
   getStoredOffers, 
-  saveOffers 
+  saveOffers,
+  saveOwnerPassword,
+  pushActiveOtpToCloud
 } from '../data/masterStore';
 import { pushCloudProducts, pushCloudMasterData } from '../data/cloudStore';
 import { compressImage } from '../utils/imageCompressor';
@@ -141,7 +143,20 @@ export const AdminPage: React.FC = () => {
     setBizWeekdays(currentBiz.openingHours?.weekdays || '10:00 AM – 9:30 PM');
     setBizWeekends(currentBiz.openingHours?.weekends || '10:00 AM – 10:00 PM');
     setOffersList(getStoredOffers());
-  }, []);
+
+    const handleAuthUpdate = () => {
+      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+      if (existingPassword && authMode === 'PHONE') {
+        setAuthMode('PASSWORD');
+      }
+    };
+    window.addEventListener('arona_auth_updated', handleAuthUpdate);
+    window.addEventListener('arona_master_data_updated', handleAuthUpdate);
+    return () => {
+      window.removeEventListener('arona_auth_updated', handleAuthUpdate);
+      window.removeEventListener('arona_master_data_updated', handleAuthUpdate);
+    };
+  }, [authMode]);
 
   // Normalize phone number (strip spaces, hyphens, leading +)
   const cleanPhone = (num: string) => num.replace(/[\s\-\+\(\)]/g, '');
@@ -155,7 +170,7 @@ export const AdminPage: React.FC = () => {
     return num ? `+91 ${num}` : '';
   };
 
-  // Helper to generate & dispatch real SMS OTP
+  // Helper to generate & dispatch real SMS OTP across devices
   const triggerSmsOtp = async (targetPhone: string, isReset = false) => {
     setIsSendingSms(true);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -164,6 +179,9 @@ export const AdminPage: React.FC = () => {
 
     // Trigger native OS notification in smartphone / system notification bar
     showSystemNotification('📱 ARONA MOBILES OTP', `Your Owner Portal OTP is ${code}. Valid for 10 minutes.`);
+
+    // Push OTP to Cloud REST Backend so mobile phone & other devices receive it
+    pushActiveOtpToCloud(code, targetPhone).catch(e => console.warn('OTP Cloud push notice:', e));
 
     try {
       const res = await sendRealSmsOtp(targetPhone, code);
@@ -175,7 +193,7 @@ export const AdminPage: React.FC = () => {
     }
 
     setIsSendingSms(false);
-    setSmsBanner(`📲 OTP SMS sent to ${maskPhoneNumber(targetPhone)}! Check your device SMS app / Notification bar.`);
+    setSmsBanner(`📲 OTP SMS sent to ${maskPhoneNumber(targetPhone)}! Check your mobile phone SMS app / Notification bar.`);
     return code;
   };
 
@@ -259,7 +277,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    safeLocalStorage.setItem('arona_owner_created_password', newPassword);
+    saveOwnerPassword(newPassword);
     if (phone.trim()) {
       safeLocalStorage.setItem('arona_owner_phone', phone);
     }
@@ -313,7 +331,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    safeLocalStorage.setItem('arona_owner_created_password', newPassword);
+    saveOwnerPassword(newPassword);
     if (phone.trim()) {
       safeLocalStorage.setItem('arona_owner_phone', phone);
     }

@@ -10,6 +10,12 @@ export interface MasterDataPayload {
   offers?: PromoOffer[];
   accessories?: AccessoryItem[];
   services?: ServiceItem[];
+  ownerPassword?: string;
+  activeOtp?: {
+    code: string;
+    phone: string;
+    timestamp: number;
+  };
   lastUpdated?: number;
 }
 
