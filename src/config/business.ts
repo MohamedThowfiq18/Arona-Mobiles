@@ -40,19 +40,30 @@ export const DEFAULT_BUSINESS_CONFIG: BusinessConfigData & { promises: Array<{ t
 };
 
 /**
- * Dynamically retrieve current live business configuration from database
+ * Dynamically retrieve current live business configuration from database with safe fallback defaults
  */
 export function getBusinessConfig() {
-  if (typeof window !== 'undefined') {
-    const stored = getStoredBusinessConfig();
-    return {
-      ...DEFAULT_BUSINESS_CONFIG,
-      ...stored,
-      socials: {
-        instagram: "https://www.instagram.com/arona_mobiles_?igsi=MTllanE4emdvanNwdQ==",
-        whatsapp: `https://wa.me/${stored.whatsappNumber || DEFAULT_BUSINESS_CONFIG.whatsappNumber}`
-      }
-    };
+  try {
+    if (typeof window !== 'undefined') {
+      const stored = getStoredBusinessConfig();
+      return {
+        ...DEFAULT_BUSINESS_CONFIG,
+        ...(stored || {}),
+        openingHours: {
+          ...DEFAULT_BUSINESS_CONFIG.openingHours,
+          ...(stored?.openingHours || {})
+        },
+        promises: (stored && Array.isArray(stored.promises) && stored.promises.length > 0)
+          ? stored.promises
+          : DEFAULT_BUSINESS_CONFIG.promises,
+        socials: {
+          instagram: "https://www.instagram.com/arona_mobiles_?igsi=MTllanE4emdvanNwdQ==",
+          whatsapp: `https://wa.me/${stored?.whatsappNumber || DEFAULT_BUSINESS_CONFIG.whatsappNumber}`
+        }
+      };
+    }
+  } catch (err) {
+    console.warn('Business config fetch fallback:', err);
   }
   return DEFAULT_BUSINESS_CONFIG;
 }

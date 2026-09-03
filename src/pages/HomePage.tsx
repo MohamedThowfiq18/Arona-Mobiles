@@ -33,9 +33,9 @@ export const HomePage: React.FC = () => {
     };
   }, []);
 
-  const flashProducts = products.filter(p => p.flashDeal || p.offerPrice || p.featured || p.inStock);
-  const activeOffers = offers.filter(o => o.active);
-  const featuredProduct = products[0];
+  const flashProducts = (Array.isArray(products) ? products : []).filter(p => p && (p.flashDeal || p.offerPrice || p.featured || p.inStock));
+  const activeOffers = (Array.isArray(offers) ? offers : []).filter(o => o && o.active);
+  const featuredProduct = Array.isArray(products) && products.length > 0 ? products[0] : null;
 
   return (
     <div className="pt-20 pb-16 space-y-16">
@@ -185,7 +185,7 @@ export const HomePage: React.FC = () => {
       {/* Promises Bar */}
       <section className="bg-slate-100 py-12 border-y border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-          {biz.promises.map((p, idx) => (
+          {(biz?.promises || []).map((p, idx) => (
             <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-2 shadow-sm">
               <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold">
                 {idx === 0 && <Award className="w-5 h-5" />}
