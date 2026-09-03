@@ -32,10 +32,13 @@ import { sendRealSmsOtp, getSmsApiKey, saveSmsApiKey, getSmsGatewayType } from '
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
+  '9659458606',
   '9994235672',
   '9787061617',
+  '919659458606',
   '919994235672',
   '919787061617',
+  '+919659458606',
   '+919994235672',
   '+919787061617'
 ];
@@ -148,7 +151,7 @@ export const AdminPage: React.FC = () => {
     const isAllowed = ALLOWED_PHONE_NUMBERS.some(allowed => cleanPhone(allowed) === cleaned || cleaned.endsWith(allowed.slice(-10)));
 
     if (!isAllowed) {
-      setAuthError('Unauthorized phone number. Only registered ARONA MOBILES owner phone numbers (+91 99XXXXXX72 / +91 97XXXXXX17) can log in.');
+      setAuthError('Unauthorized phone number. Only registered ARONA MOBILES owner phone numbers (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17) can log in.');
       return;
     }
 
@@ -195,7 +198,7 @@ export const AdminPage: React.FC = () => {
     const isAllowed = ALLOWED_PHONE_NUMBERS.some(allowed => cleanPhone(allowed) === cleaned || cleaned.endsWith(allowed.slice(-10)));
 
     if (!isAllowed) {
-      setAuthError('Unauthorized phone number. Only registered ARONA MOBILES owner phone numbers (+91 99XXXXXX72 / +91 97XXXXXX17) can log in.');
+      setAuthError('Unauthorized phone number. Only registered ARONA MOBILES owner phone numbers (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17) can log in.');
       return;
     }
 
@@ -239,7 +242,7 @@ export const AdminPage: React.FC = () => {
     const isAllowed = ALLOWED_PHONE_NUMBERS.some(allowed => cleanPhone(allowed) === cleaned || cleaned.endsWith(allowed.slice(-10)));
 
     if (!isAllowed) {
-      setAuthError('Unauthorized phone number. Password reset OTP can only be sent to registered owner phone numbers (+91 99XXXXXX72 / +91 97XXXXXX17).');
+      setAuthError('Unauthorized phone number. Password reset OTP can only be sent to registered owner phone numbers (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17).');
       return;
     }
 
@@ -546,7 +549,7 @@ export const AdminPage: React.FC = () => {
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-blue-500"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Real SMS OTPs will be dispatched via API directly to Indian numbers +91 9994235672 / +91 9787061617.
+                  Real SMS OTPs will be dispatched via API directly to Indian numbers +91 9659458606 / +91 9994235672 / +91 9787061617.
                 </p>
               </div>
 
@@ -624,7 +627,7 @@ export const AdminPage: React.FC = () => {
                     autoFocus
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1.5">Authorized owner numbers: +91 99XXXXXX72 / +91 97XXXXXX17</p>
+                <p className="text-[11px] text-slate-500 mt-1.5">Authorized owner numbers: +91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17</p>
               </div>
 
               <button
@@ -726,7 +729,7 @@ export const AdminPage: React.FC = () => {
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-all"
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Authorized owner numbers: +91 99XXXXXX72 / +91 97XXXXXX17</p>
+                <p className="text-[11px] text-slate-500 mt-1">Authorized owner numbers: +91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17</p>
               </div>
 
               <div>
@@ -782,7 +785,7 @@ export const AdminPage: React.FC = () => {
             <form onSubmit={handleSendResetOtp} className="space-y-4 text-left">
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
                 <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <span>Enter your registered owner mobile number (+91 99XXXXXX72 / +91 97XXXXXX17) to receive a Password Reset OTP via Mobile SMS.</span>
+                <span>Enter your registered owner mobile number (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17) to receive a Password Reset OTP via Mobile SMS.</span>
               </div>
 
               <div>
