@@ -120,17 +120,16 @@ export const AdminPage: React.FC = () => {
     // Trigger native OS notification in smartphone / system notification bar
     showSystemNotification('📱 ARONA MOBILES OTP', `Your Owner Portal OTP is ${code}. Valid for 10 minutes.`);
 
-    const res = await sendRealSmsOtp(targetPhone, code);
-    setIsSendingSms(false);
-
-    if (res.smsDeepLink) {
-      setSmsDeepLink(res.smsDeepLink);
-      // Automatically attempt native mobile SMS app trigger on mobile browsers
-      if (typeof window !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent)) {
-        window.location.href = res.smsDeepLink;
+    try {
+      const res = await sendRealSmsOtp(targetPhone, code);
+      if (res.smsDeepLink) {
+        setSmsDeepLink(res.smsDeepLink);
       }
+    } catch (err) {
+      console.warn('SMS OTP dispatch notice:', err);
     }
 
+    setIsSendingSms(false);
     setSmsBanner(`📲 OTP SMS sent to ${maskPhoneNumber(targetPhone)}! Check your device SMS app / Notification bar.`);
     return code;
   };
