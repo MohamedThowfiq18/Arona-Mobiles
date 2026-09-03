@@ -1001,30 +1001,30 @@ export const AdminPage: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
       {/* Admin Header Bar */}
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-600/20">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-600/20 flex-shrink-0">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div className="text-left">
-              <h1 className="font-heading font-black text-xl text-white">ARONA OWNER PORTAL</h1>
-              <p className="text-slate-400 text-xs">Logged in via {maskPhoneNumber(phone || '99XXXXXX72')}</p>
+              <h1 className="font-heading font-black text-lg sm:text-xl text-white leading-tight">ARONA OWNER PORTAL</h1>
+              <p className="text-slate-400 text-[11px] sm:text-xs">Logged in via {maskPhoneNumber(phone || '99XXXXXX72')}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
             <Link 
               to="/" 
               target="_blank" 
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-2 transition-all"
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-all"
             >
               <Eye className="w-4 h-4 text-blue-400" />
-              <span>View Customer Site</span>
+              <span>View Site</span>
             </Link>
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition-all"
+              className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition-all"
             >
               Logout
             </button>
@@ -1032,46 +1032,46 @@ export const AdminPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
         
         {/* Success Banner */}
         {successMsg && (
-          <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 text-sm animate-fade-in text-left">
+          <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 text-xs sm:text-sm animate-fade-in text-left">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
             <span className="font-medium">{successMsg}</span>
           </div>
         )}
 
         {/* Master Admin Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
           <button
             onClick={() => setAdminTab('mobiles')}
-            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
               adminTab === 'mobiles' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <Smartphone className="w-4 h-4" />
-            <span>📱 Mobiles Catalog ({products.length})</span>
+            <span>Mobiles ({products.length})</span>
           </button>
 
           <button
             onClick={() => setAdminTab('business')}
-            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
               adminTab === 'business' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>🏢 Store & Contact Info</span>
+            <span>Store Info</span>
           </button>
 
           <button
             onClick={() => setAdminTab('offers')}
-            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
               adminTab === 'offers' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30' : 'text-slate-400 hover:text-white'
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>🏷️ Banner Offers & Discounts ({offersList.filter(o => o.active).length})</span>
+            <span>Offers ({offersList.filter(o => o.active).length})</span>
           </button>
         </div>
 
