@@ -100,8 +100,12 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div>
-            &copy; {new Date().getFullYear()} {biz.name}. All Rights Reserved.
+          <div className="flex items-center gap-3">
+            <span>&copy; {new Date().getFullYear()} {biz.name}. All Rights Reserved.</span>
+            <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              <span>LIVE REALTIME CLOUD SYNC</span>
+            </span>
           </div>
           <div className="flex items-center gap-4 font-mono text-[11px]">
             <span>100% Genuine Certified</span>

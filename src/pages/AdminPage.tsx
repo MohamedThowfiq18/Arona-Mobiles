@@ -9,24 +9,23 @@ import {
   Smartphone, 
   Lock, 
   Eye, 
-  RefreshCw, 
   Sparkles,
   ArrowLeft,
   KeyRound,
   Send,
   CheckCircle,
   AlertCircle,
-  Key,
   Edit,
-  RotateCcw,
   Settings,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Server,
+  LogOut,
+  Laptop
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
 import { 
   getStoredProducts, 
-  addProduct, 
   deleteProduct, 
   updateProduct, 
   resetProductsToDefault 
@@ -37,30 +36,27 @@ import {
   getStoredOffers, 
   saveOffers,
   saveOwnerPassword,
-  pushActiveOtpToCloud
+  pushActiveOtpToCloud,
+  getStoredSessions,
+  saveSessions
 } from '../data/masterStore';
 import { pushCloudProducts, pushCloudMasterData } from '../data/cloudStore';
-import { compressImage } from '../utils/imageCompressor';
+import { uploadImageToCloudStorage } from '../utils/cloudImageStorage';
+import { 
+  getCurrentSession, 
+  createOwnerSession, 
+  logoutCurrentDevice, 
+  detectDeviceName,
+  OwnerSession,
+  ALLOWED_PHONE_NUMBERS
+} from '../utils/ownerAuth';
 import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
 import { sendRealSmsOtp, showSystemNotification } from '../utils/smsService';
 import { PromoOffer, BusinessConfigData } from '../types';
 
-// Authorized Owner Phone Numbers
-const ALLOWED_PHONE_NUMBERS = [
-  '9659458606',
-  '9994235672',
-  '9787061617',
-  '919659458606',
-  '919994235672',
-  '919787061617',
-  '+919659458606',
-  '+919994235672',
-  '+919787061617'
-];
-
 export const AdminPage: React.FC = () => {
   // Navigation Tab State
-  const [adminTab, setAdminTab] = useState<'mobiles' | 'business' | 'offers'>('mobiles');
+  const [adminTab, setAdminTab] = useState<'mobiles' | 'business' | 'offers' | 'security'>('mobiles');
 
   // Authentication Flow State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -86,6 +82,9 @@ export const AdminPage: React.FC = () => {
   const [smsBanner, setSmsBanner] = useState('');
   const [smsDeepLink, setSmsDeepLink] = useState<string>('');
   const [isSendingSms, setIsSendingSms] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [sessionsList, setSessionsList] = useState<OwnerSession[]>(getStoredSessions);
 
   // Products State & Edit Mode
   const [products, setProducts] = useState<Product[]>([]);
@@ -131,6 +130,12 @@ export const AdminPage: React.FC = () => {
   const [offerDiscountTag, setOfferDiscountTag] = useState('');
 
   useEffect(() => {
+    // 1. Check persistent device authentication session on mount
+    const activeSession = getCurrentSession();
+    if (activeSession && activeSession.active) {
+      setIsAuthenticated(true);
+    }
+
     setProducts(getStoredProducts());
     const currentBiz = getStoredBusinessConfig();
     setBizConfig(currentBiz);
@@ -143,18 +148,29 @@ export const AdminPage: React.FC = () => {
     setBizWeekdays(currentBiz.openingHours?.weekdays || '10:00 AM – 9:30 PM');
     setBizWeekends(currentBiz.openingHours?.weekends || '10:00 AM – 10:00 PM');
     setOffersList(getStoredOffers());
+    setSessionsList(getStoredSessions());
 
     const handleAuthUpdate = () => {
       const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
       if (existingPassword && authMode === 'PHONE') {
         setAuthMode('PASSWORD');
       }
+      setSessionsList(getStoredSessions());
     };
+
+    const handleSessionRevoked = () => {
+      setIsAuthenticated(false);
+      setAuthError('Owner session was revoked on another device.');
+    };
+
     window.addEventListener('arona_auth_updated', handleAuthUpdate);
     window.addEventListener('arona_master_data_updated', handleAuthUpdate);
+    window.addEventListener('arona_owner_session_revoked', handleSessionRevoked);
+
     return () => {
       window.removeEventListener('arona_auth_updated', handleAuthUpdate);
       window.removeEventListener('arona_master_data_updated', handleAuthUpdate);
+      window.removeEventListener('arona_owner_session_revoked', handleSessionRevoked);
     };
   }, [authMode]);
 
@@ -340,6 +356,11 @@ export const AdminPage: React.FC = () => {
   };
 
   const completeLogin = () => {
+    const session = createOwnerSession(phone || '9659458606', rememberMe);
+    const existing = getStoredSessions();
+    const updated = [session, ...existing.filter(s => s.sessionId !== session.sessionId)];
+    saveSessions(updated);
+
     setIsAuthenticated(true);
     safeSessionStorage.setItem('arona_owner_auth', 'true');
     setAuthError('');
@@ -347,6 +368,13 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleLogout = () => {
+    const current = getCurrentSession();
+    if (current) {
+      const existing = getStoredSessions();
+      const updated = existing.map(s => s.sessionId === current.sessionId ? { ...s, active: false } : s);
+      saveSessions(updated);
+    }
+    logoutCurrentDevice();
     setIsAuthenticated(false);
     safeSessionStorage.removeItem('arona_owner_auth');
     const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
@@ -357,22 +385,38 @@ export const AdminPage: React.FC = () => {
     setPasswordInput('');
   };
 
-  // Compressed Image File Upload Handler
+  const handleSignOutOtherDevices = () => {
+    const current = getCurrentSession();
+    if (!current) return;
+    const existing = getStoredSessions();
+    const updated = existing.map(s => s.sessionId === current.sessionId ? s : { ...s, active: false });
+    saveSessions(updated);
+    setSessionsList(updated);
+    setSuccessMsg('All other active sessions revoked globally across other devices!');
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
+  const handleRevokeAllSessions = () => {
+    const existing = getStoredSessions();
+    const updated = existing.map(s => ({ ...s, active: false }));
+    saveSessions(updated);
+    setSessionsList(updated);
+    handleLogout();
+  };
+
+  // Persistent Cloud Image File Upload Handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsUploadingImage(true);
       try {
-        const compressed = await compressImage(file, 1000, 0.75);
-        setImagePreview(compressed);
+        const cloudUrl = await uploadImageToCloudStorage(file);
+        setImagePreview(cloudUrl);
         setImageUrlInput('');
       } catch (err) {
-        console.error('Failed to compress image:', err);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreview(reader.result as string);
-          setImageUrlInput('');
-        };
-        reader.readAsDataURL(file);
+        console.error('Failed to upload cloud image:', err);
+      } finally {
+        setIsUploadingImage(false);
       }
     }
   };
@@ -752,6 +796,19 @@ export const AdminPage: React.FC = () => {
                 />
               </div>
 
+              <label className="flex items-center gap-2.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs text-slate-300 cursor-pointer hover:border-slate-700 transition-all">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                />
+                <div className="text-left">
+                  <span className="font-semibold text-white block">☑ Remember this device</span>
+                  <span className="text-[11px] text-slate-400 block">Stay authenticated on this browser without entering OTP every visit</span>
+                </div>
+              </label>
+
               <button
                 type="submit"
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
@@ -1061,7 +1118,7 @@ export const AdminPage: React.FC = () => {
         )}
 
         {/* Master Admin Navigation Tabs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
           <button
             onClick={() => setAdminTab('mobiles')}
             className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
@@ -1090,6 +1147,16 @@ export const AdminPage: React.FC = () => {
           >
             <Sparkles className="w-4 h-4" />
             <span>Offers ({offersList.filter(o => o.active).length})</span>
+          </button>
+
+          <button
+            onClick={() => setAdminTab('security')}
+            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
+              adminTab === 'security' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Security & Sessions</span>
           </button>
         </div>
 
@@ -1676,6 +1743,124 @@ export const AdminPage: React.FC = () => {
           </div>
 
         </div>
+        )}
+
+        {/* TAB 4: SECURITY & AUTHORIZED DEVICE SESSIONS */}
+        {adminTab === 'security' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-4xl mx-auto">
+            <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
+                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                  <span>Owner Account Security & Authorized Sessions</span>
+                </h2>
+                <p className="text-slate-400 text-xs mt-1">Manage physical devices authorized to access the Owner Portal</p>
+              </div>
+              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1 rounded-full font-mono font-bold">
+                ● REALTIME AUTH GUARD
+              </span>
+            </div>
+
+            {/* Current Device Card */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <Laptop className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{detectDeviceName()}</span>
+                      <span className="bg-blue-500/20 text-blue-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                        Current Device
+                      </span>
+                    </div>
+                    <p className="text-slate-400 text-xs mt-0.5">
+                      Session Active • Logged in via OTP verification
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Session Management Actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                onClick={handleLogout}
+                className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
+              >
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out This Device</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">Log out from this browser session</p>
+              </button>
+
+              <button
+                onClick={handleSignOutOtherDevices}
+                className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
+              >
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                  <Server className="w-4 h-4" />
+                  <span>Sign Out Other Devices</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">Revoke sessions on all other phones/laptops</p>
+              </button>
+
+              <button
+                onClick={handleRevokeAllSessions}
+                className="p-4 bg-slate-950 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 rounded-2xl text-left transition-all space-y-1"
+              >
+                <div className="flex items-center gap-2 text-rose-500 font-bold text-xs">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Revoke All Sessions</span>
+                </div>
+                <p className="text-slate-400 text-[11px]">Force OTP re-authentication everywhere</p>
+              </button>
+            </div>
+
+            {/* Active Devices List */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-slate-300 font-bold text-sm">Authorized Device Session Register ({sessionsList.length})</h3>
+              
+              {sessionsList.length === 0 ? (
+                <p className="text-slate-500 text-xs">No remote sessions recorded.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sessionsList.map(session => (
+                    <div
+                      key={session.sessionId}
+                      className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                        session.active
+                          ? 'bg-slate-950 border-slate-800 text-slate-200'
+                          : 'bg-slate-950/40 border-slate-900 text-slate-600 line-through'
+                      }`}
+                    >
+                      <div className="space-y-1 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white">{session.deviceName}</span>
+                          {session.rememberMe && (
+                            <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-mono">
+                              Remembered
+                            </span>
+                          )}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            session.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 text-rose-500'
+                          }`}>
+                            {session.active ? 'Active' : 'Revoked'}
+                          </span>
+                        </div>
+                        <p className="text-slate-400 text-[11px]">
+                          Authorized for +91 {session.phone.slice(-10)} • Login: {new Date(session.createdAt).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
         )}
 
       </main>

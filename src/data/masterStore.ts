@@ -4,13 +4,7 @@ import { SAMPLE_ACCESSORIES } from './accessories';
 import { SAMPLE_SERVICES } from './services';
 import { BUSINESS_CONFIG } from '../config/business';
 import { fetchCloudMasterData, pushCloudMasterData, MasterDataPayload } from './cloudStore';
-import { safeLocalStorage } from '../utils/safeStorage';
-
-const PRODUCTS_STORAGE_KEY = 'arona_mobiles_products_v1';
-const BUSINESS_STORAGE_KEY = 'arona_business_config_v1';
-const OFFERS_STORAGE_KEY = 'arona_offers_config_v1';
-const ACCESSORIES_STORAGE_KEY = 'arona_accessories_v1';
-const SERVICES_STORAGE_KEY = 'arona_services_v1';
+import { OwnerSession } from '../utils/ownerAuth';
 
 export const SAMPLE_OFFERS: PromoOffer[] = [
   {
@@ -32,159 +26,56 @@ export const SAMPLE_OFFERS: PromoOffer[] = [
   }
 ];
 
-/**
- * 1. Products Management
- */
-export function getStoredProducts(): Product[] {
-  try {
-    const saved = safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+// In-memory master state mirror (hydrated from live Cloud DB)
+let masterMemoryCache: MasterDataPayload = {
+  products: SAMPLE_PRODUCTS,
+  businessConfig: BUSINESS_CONFIG as BusinessConfigData,
+  offers: SAMPLE_OFFERS,
+  accessories: SAMPLE_ACCESSORIES,
+  services: SAMPLE_SERVICES,
+  sessions: []
+};
+
+// Initial Cloud Hydration
+if (typeof window !== 'undefined') {
+  fetchCloudMasterData().then(cloudData => {
+    if (cloudData) {
+      if (Array.isArray(cloudData.products) && cloudData.products.length > 0) {
+        masterMemoryCache.products = cloudData.products;
       }
-    }
-  } catch (error) {
-    console.error('Failed to read products:', error);
-  }
-  return SAMPLE_PRODUCTS;
-}
-
-export function saveProducts(products: Product[], syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-    notifyUpdate('arona_products_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save products:', error);
-  }
-}
-
-/**
- * 2. Business Config Management
- */
-export function getStoredBusinessConfig(): BusinessConfigData {
-  try {
-    const saved = safeLocalStorage.getItem(BUSINESS_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object' && parsed.phone) {
-        return parsed;
+      if (cloudData.businessConfig && cloudData.businessConfig.phone) {
+        masterMemoryCache.businessConfig = cloudData.businessConfig;
       }
-    }
-  } catch (error) {
-    console.error('Failed to read business config:', error);
-  }
-  return BUSINESS_CONFIG as BusinessConfigData;
-}
-
-export function saveBusinessConfig(config: BusinessConfigData, syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(BUSINESS_STORAGE_KEY, JSON.stringify(config));
-    notifyUpdate('arona_business_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save business config:', error);
-  }
-}
-
-/**
- * 3. Offers Management
- */
-export function getStoredOffers(): PromoOffer[] {
-  try {
-    const saved = safeLocalStorage.getItem(OFFERS_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(cloudData.offers)) {
+        masterMemoryCache.offers = cloudData.offers;
       }
-    }
-  } catch (error) {
-    console.error('Failed to read offers:', error);
-  }
-  return SAMPLE_OFFERS;
-}
-
-export function saveOffers(offers: PromoOffer[], syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(offers));
-    notifyUpdate('arona_offers_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save offers:', error);
-  }
-}
-
-/**
- * 4. Accessories Management
- */
-export function getStoredAccessories(): AccessoryItem[] {
-  try {
-    const saved = safeLocalStorage.getItem(ACCESSORIES_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(cloudData.accessories)) {
+        masterMemoryCache.accessories = cloudData.accessories;
       }
-    }
-  } catch (error) {
-    console.error('Failed to read accessories:', error);
-  }
-  return SAMPLE_ACCESSORIES;
-}
-
-export function saveAccessories(accessories: AccessoryItem[], syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(ACCESSORIES_STORAGE_KEY, JSON.stringify(accessories));
-    notifyUpdate('arona_accessories_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save accessories:', error);
-  }
-}
-
-/**
- * 5. Services Management
- */
-export function getStoredServices(): ServiceItem[] {
-  try {
-    const saved = safeLocalStorage.getItem(SERVICES_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(cloudData.services)) {
+        masterMemoryCache.services = cloudData.services;
       }
+      if (Array.isArray(cloudData.sessions)) {
+        masterMemoryCache.sessions = cloudData.sessions;
+      }
+      notifyUpdate('arona_master_data_updated');
     }
-  } catch (error) {
-    console.error('Failed to read services:', error);
-  }
-  return SAMPLE_SERVICES;
+  });
+
+  window.addEventListener('arona_master_data_updated', () => {
+    fetchCloudMasterData().then(data => {
+      if (data) {
+        if (data.products) masterMemoryCache.products = data.products;
+        if (data.businessConfig) masterMemoryCache.businessConfig = data.businessConfig;
+        if (data.offers) masterMemoryCache.offers = data.offers;
+        if (data.accessories) masterMemoryCache.accessories = data.accessories;
+        if (data.services) masterMemoryCache.services = data.services;
+        if (data.sessions) masterMemoryCache.sessions = data.sessions;
+      }
+    });
+  });
 }
 
-export function saveServices(services: ServiceItem[], syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(SERVICES_STORAGE_KEY, JSON.stringify(services));
-    notifyUpdate('arona_services_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save services:', error);
-  }
-}
-
-/**
- * Dispatch DOM events so components update live without page reload
- */
 function notifyUpdate(eventName: string) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(eventName));
@@ -192,151 +83,159 @@ function notifyUpdate(eventName: string) {
   }
 }
 
-const PASSWORD_STORAGE_KEY = 'arona_owner_created_password';
-
 /**
- * 6. Owner Password Cloud Sync Management
+ * 1. Products Management (Single Source of Truth: Cloud DB)
  */
-export function getStoredOwnerPassword(): string {
-  return safeLocalStorage.getItem(PASSWORD_STORAGE_KEY) || '';
+export function getStoredProducts(): Product[] {
+  return masterMemoryCache.products && masterMemoryCache.products.length > 0
+    ? masterMemoryCache.products
+    : SAMPLE_PRODUCTS;
 }
 
-export function saveOwnerPassword(password: string, syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(PASSWORD_STORAGE_KEY, password);
-    notifyUpdate('arona_auth_updated');
-    if (syncToCloud) {
-      pushCurrentMasterDataToCloud().catch(e => console.warn('Password cloud sync err:', e));
-    }
-  } catch (error) {
-    console.error('Failed to save owner password:', error);
+export function saveProducts(products: Product[], syncToCloud = true): void {
+  masterMemoryCache.products = products;
+  notifyUpdate('arona_products_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
   }
 }
 
 /**
- * Dispatch Active OTP to global cloud database for cross-device notification
+ * 2. Business Config Management (Single Source of Truth: Cloud DB)
  */
-export async function pushActiveOtpToCloud(code: string, phone: string): Promise<boolean> {
-  const current = await fetchCloudMasterData();
-  const updatedPayload: MasterDataPayload = {
-    ...(current || {
-      products: getStoredProducts(),
-      businessConfig: getStoredBusinessConfig(),
-      offers: getStoredOffers(),
-      accessories: getStoredAccessories(),
-      services: getStoredServices()
-    }),
-    activeOtp: {
-      code,
-      phone,
-      timestamp: Date.now()
-    }
-  };
-  return pushCloudMasterData(updatedPayload);
+export function getStoredBusinessConfig(): BusinessConfigData {
+  return masterMemoryCache.businessConfig && masterMemoryCache.businessConfig.phone
+    ? masterMemoryCache.businessConfig
+    : (BUSINESS_CONFIG as BusinessConfigData);
+}
+
+export function saveBusinessConfig(config: BusinessConfigData, syncToCloud = true): void {
+  masterMemoryCache.businessConfig = config;
+  notifyUpdate('arona_business_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
+  }
 }
 
 /**
- * Gather current state and push full payload to cloud
+ * 3. Offers Management (Single Source of Truth: Cloud DB)
+ */
+export function getStoredOffers(): PromoOffer[] {
+  return masterMemoryCache.offers || SAMPLE_OFFERS;
+}
+
+export function saveOffers(offers: PromoOffer[], syncToCloud = true): void {
+  masterMemoryCache.offers = offers;
+  notifyUpdate('arona_offers_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
+  }
+}
+
+/**
+ * 4. Accessories Management
+ */
+export function getStoredAccessories(): AccessoryItem[] {
+  return masterMemoryCache.accessories || SAMPLE_ACCESSORIES;
+}
+
+export function saveAccessories(accessories: AccessoryItem[], syncToCloud = true): void {
+  masterMemoryCache.accessories = accessories;
+  notifyUpdate('arona_accessories_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
+  }
+}
+
+/**
+ * 5. Services Management
+ */
+export function getStoredServices(): ServiceItem[] {
+  return masterMemoryCache.services || SAMPLE_SERVICES;
+}
+
+export function saveServices(services: ServiceItem[], syncToCloud = true): void {
+  masterMemoryCache.services = services;
+  notifyUpdate('arona_services_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
+  }
+}
+
+/**
+ * 6. Owner Password Management
+ */
+export function getStoredOwnerPassword(): string {
+  return masterMemoryCache.ownerPassword || '';
+}
+
+export function saveOwnerPassword(password: string, syncToCloud = true): void {
+  masterMemoryCache.ownerPassword = password;
+  notifyUpdate('arona_auth_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Password sync err:', e));
+  }
+}
+
+/**
+ * 7. Owner Sessions Management (Multi-device authorization)
+ */
+export function getStoredSessions(): OwnerSession[] {
+  return masterMemoryCache.sessions || [];
+}
+
+export function saveSessions(sessions: OwnerSession[], syncToCloud = true): void {
+  masterMemoryCache.sessions = sessions;
+  notifyUpdate('arona_sessions_updated');
+  if (syncToCloud) {
+    pushCurrentMasterDataToCloud().catch(e => console.warn('Sessions sync err:', e));
+  }
+}
+
+/**
+ * Active OTP Dispatch to Cloud DB
+ */
+export async function pushActiveOtpToCloud(code: string, phone: string): Promise<boolean> {
+  masterMemoryCache.activeOtp = {
+    code,
+    phone,
+    timestamp: Date.now()
+  };
+  return pushCurrentMasterDataToCloud();
+}
+
+/**
+ * Push full current master data payload to Cloud DB
  */
 export async function pushCurrentMasterDataToCloud(): Promise<boolean> {
   const payload: MasterDataPayload = {
-    products: getStoredProducts(),
-    businessConfig: getStoredBusinessConfig(),
-    offers: getStoredOffers(),
-    accessories: getStoredAccessories(),
-    services: getStoredServices(),
-    ownerPassword: getStoredOwnerPassword()
+    products: masterMemoryCache.products,
+    businessConfig: masterMemoryCache.businessConfig,
+    offers: masterMemoryCache.offers,
+    accessories: masterMemoryCache.accessories,
+    services: masterMemoryCache.services,
+    ownerPassword: masterMemoryCache.ownerPassword,
+    sessions: masterMemoryCache.sessions,
+    activeOtp: masterMemoryCache.activeOtp
   };
   return pushCloudMasterData(payload);
 }
 
 /**
- * Synchronize local master data with live global cloud database
+ * Synchronize local master data with live Cloud DB
  */
 export async function syncMasterDataWithCloud(): Promise<void> {
-  try {
-    const cloudPayload = await fetchCloudMasterData();
-    if (cloudPayload && typeof cloudPayload === 'object') {
-      let updatedAny = false;
-
-      // Sync Cloud Owner Password to Local Device Storage
-      if (cloudPayload.ownerPassword && typeof cloudPayload.ownerPassword === 'string') {
-        const localPwd = safeLocalStorage.getItem(PASSWORD_STORAGE_KEY);
-        if (localPwd !== cloudPayload.ownerPassword) {
-          safeLocalStorage.setItem(PASSWORD_STORAGE_KEY, cloudPayload.ownerPassword);
-          notifyUpdate('arona_auth_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (cloudPayload.products && Array.isArray(cloudPayload.products) && cloudPayload.products.length > 0) {
-        const rawLocal = safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY);
-        const rawCloud = JSON.stringify(cloudPayload.products);
-        if (rawLocal !== rawCloud) {
-          safeLocalStorage.setItem(PRODUCTS_STORAGE_KEY, rawCloud);
-          notifyUpdate('arona_products_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (cloudPayload.businessConfig && cloudPayload.businessConfig.phone) {
-        const rawLocal = safeLocalStorage.getItem(BUSINESS_STORAGE_KEY);
-        const rawCloud = JSON.stringify(cloudPayload.businessConfig);
-        if (rawLocal !== rawCloud) {
-          safeLocalStorage.setItem(BUSINESS_STORAGE_KEY, rawCloud);
-          notifyUpdate('arona_business_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (cloudPayload.offers && Array.isArray(cloudPayload.offers)) {
-        const rawLocal = safeLocalStorage.getItem(OFFERS_STORAGE_KEY);
-        const rawCloud = JSON.stringify(cloudPayload.offers);
-        if (rawLocal !== rawCloud) {
-          safeLocalStorage.setItem(OFFERS_STORAGE_KEY, rawCloud);
-          notifyUpdate('arona_offers_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (cloudPayload.accessories && Array.isArray(cloudPayload.accessories)) {
-        const rawLocal = safeLocalStorage.getItem(ACCESSORIES_STORAGE_KEY);
-        const rawCloud = JSON.stringify(cloudPayload.accessories);
-        if (rawLocal !== rawCloud) {
-          safeLocalStorage.setItem(ACCESSORIES_STORAGE_KEY, rawCloud);
-          notifyUpdate('arona_accessories_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (cloudPayload.services && Array.isArray(cloudPayload.services)) {
-        const rawLocal = safeLocalStorage.getItem(SERVICES_STORAGE_KEY);
-        const rawCloud = JSON.stringify(cloudPayload.services);
-        if (rawLocal !== rawCloud) {
-          safeLocalStorage.setItem(SERVICES_STORAGE_KEY, rawCloud);
-          notifyUpdate('arona_services_updated');
-          updatedAny = true;
-        }
-      }
-
-      if (updatedAny) {
-        notifyUpdate('arona_master_data_updated');
-      }
+  const cloudPayload = await fetchCloudMasterData();
+  if (cloudPayload && typeof cloudPayload === 'object') {
+    let updated = false;
+    if (cloudPayload.products) { masterMemoryCache.products = cloudPayload.products; updated = true; }
+    if (cloudPayload.businessConfig) { masterMemoryCache.businessConfig = cloudPayload.businessConfig; updated = true; }
+    if (cloudPayload.offers) { masterMemoryCache.offers = cloudPayload.offers; updated = true; }
+    if (cloudPayload.accessories) { masterMemoryCache.accessories = cloudPayload.accessories; updated = true; }
+    if (cloudPayload.services) { masterMemoryCache.services = cloudPayload.services; updated = true; }
+    if (cloudPayload.sessions) { masterMemoryCache.sessions = cloudPayload.sessions; updated = true; }
+    if (updated) {
+      notifyUpdate('arona_master_data_updated');
     }
-  } catch (error) {
-    console.warn('Cloud sync error:', error);
   }
-}
-
-// Background auto-sync (every 3 seconds for zero-delay live updates)
-if (typeof window !== 'undefined') {
-  setTimeout(() => syncMasterDataWithCloud(), 100);
-
-  window.addEventListener('focus', () => {
-    syncMasterDataWithCloud();
-  });
-
-  setInterval(() => {
-    syncMasterDataWithCloud();
-  }, 3000);
 }
