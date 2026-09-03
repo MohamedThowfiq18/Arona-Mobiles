@@ -18,13 +18,17 @@ import {
   AlertCircle,
   Key,
   Edit,
-  RotateCcw
+  RotateCcw,
+  Settings,
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
 import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProductsToDefault } from '../data/productStore';
 import { pushCloudProducts } from '../data/cloudStore';
 import { compressImage } from '../utils/imageCompressor';
 import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
+import { sendRealSmsOtp, getSmsApiKey, saveSmsApiKey, getSmsGatewayType } from '../utils/smsService';
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
@@ -59,6 +63,11 @@ export const AdminPage: React.FC = () => {
   
   const [authError, setAuthError] = useState('');
   const [smsBanner, setSmsBanner] = useState('');
+  const [smsApiKey, setSmsApiKeyState] = useState<string>(getSmsApiKey);
+  const [smsGateway, setSmsGateway] = useState<'fast2sms' | '2factor'>(getSmsGatewayType);
+  const [showSmsSettings, setShowSmsSettings] = useState<boolean>(false);
+  const [smsDeepLink, setSmsDeepLink] = useState<string>('');
+  const [isSendingSms, setIsSendingSms] = useState<boolean>(false);
 
   // Products State & Edit Mode
   const [products, setProducts] = useState<Product[]>([]);
@@ -101,8 +110,37 @@ export const AdminPage: React.FC = () => {
     return num ? `+91 ${num}` : '';
   };
 
+  const saveSmsSettings = (key: string, gateway: 'fast2sms' | '2factor') => {
+    saveSmsApiKey(key, gateway);
+    setSmsApiKeyState(key);
+    setSmsGateway(gateway);
+    setShowSmsSettings(false);
+    setSmsBanner('SMS Gateway settings updated successfully!');
+  };
+
+  // Helper to generate & dispatch real SMS OTP
+  const triggerSmsOtp = async (targetPhone: string, isReset = false) => {
+    setIsSendingSms(true);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(code);
+
+    const res = await sendRealSmsOtp(targetPhone, code);
+    setIsSendingSms(false);
+
+    if (res.success) {
+      setSmsBanner(`📲 Real Mobile SMS OTP sent via ${res.gateway} to ${maskPhoneNumber(targetPhone)}!`);
+      setSmsDeepLink('');
+    } else {
+      setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(targetPhone)}. ${res.message}`);
+      if (res.smsDeepLink) {
+        setSmsDeepLink(res.smsDeepLink);
+      }
+    }
+    return code;
+  };
+
   // Step 1: Send OTP for Login
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
@@ -114,10 +152,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    // Generate 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(code);
-    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)} via Mobile SMS. Please check your phone SMS messages for the 6-digit OTP.`);
+    await triggerSmsOtp(phone, false);
 
     // Check if owner already created a password
     const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
@@ -129,12 +164,10 @@ export const AdminPage: React.FC = () => {
   };
 
   // Switch to OTP login mode manually
-  const handleRequestOtpMode = () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(code);
-    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)} via Mobile SMS. Please check your phone SMS messages for the 6-digit OTP.`);
-    setAuthMode('OTP');
+  const handleRequestOtpMode = async () => {
     setAuthError('');
+    await triggerSmsOtp(phone, false);
+    setAuthMode('OTP');
   };
 
   // Step 2: Verify OTP
@@ -198,7 +231,7 @@ export const AdminPage: React.FC = () => {
     setOtpInput('');
   };
 
-  const handleSendResetOtp = (e: React.FormEvent) => {
+  const handleSendResetOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
@@ -210,9 +243,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(code);
-    setSmsBanner(`🔑 Password Reset OTP sent to registered mobile ${maskPhoneNumber(phone)} via Mobile SMS. Check your mobile inbox.`);
+    await triggerSmsOtp(phone, true);
     setAuthMode('FORGOT_OTP');
   };
 
@@ -466,10 +497,68 @@ export const AdminPage: React.FC = () => {
             <ShieldCheck className="w-8 h-8" />
           </div>
           
-          <div>
-            <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
-            <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
+          <div className="flex items-center justify-between">
+            <div className="text-left">
+              <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
+              <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSmsSettings(!showSmsSettings)}
+              className="p-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 transition-all flex items-center gap-1.5 text-xs font-semibold"
+              title="Configure SMS Gateway API Key"
+            >
+              <Settings className="w-4 h-4 text-blue-400" />
+              <span className="hidden sm:inline">SMS Settings</span>
+            </button>
           </div>
+
+          {/* SMS GATEWAY API CONFIGURATION DRAWER */}
+          {showSmsSettings && (
+            <div className="bg-slate-950 border border-blue-500/40 p-4 rounded-2xl text-left space-y-3 shadow-xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                  <Settings className="w-4 h-4" />
+                  <span>SMS Gateway API Configuration</span>
+                </h3>
+                <button onClick={() => setShowSmsSettings(false)} className="text-slate-400 hover:text-white text-xs font-bold px-1">✕</button>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">Select SMS Gateway Provider</label>
+                <select
+                  value={smsGateway}
+                  onChange={(e) => setSmsGateway(e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-500"
+                >
+                  <option value="fast2sms">Fast2SMS API (Fast2SMS.com - India)</option>
+                  <option value="2factor">2Factor API (2Factor.in - India)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">Enter API Key</label>
+                <input
+                  type="text"
+                  placeholder={smsGateway === 'fast2sms' ? 'Paste Fast2SMS API Key' : 'Paste 2Factor API Key'}
+                  value={smsApiKey}
+                  onChange={(e) => setSmsApiKeyState(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Real SMS OTPs will be dispatched via API directly to Indian numbers +91 9659458606 / +91 9787061617.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => saveSmsSettings(smsApiKey, smsGateway)}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-md"
+              >
+                Save SMS Gateway API Key
+              </button>
+            </div>
+          )}
 
           {/* QUICK-SWITCH TABS */}
           <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-semibold">
@@ -557,9 +646,27 @@ export const AdminPage: React.FC = () => {
                   <span className="text-emerald-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
                 </div>
 
-                <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  <span>SMS verification code sent to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit OTP code.</span>
+                <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <span>SMS verification code sent to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit OTP code.</span>
+                  </div>
+
+                  {smsDeepLink && (
+                    <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-300">On mobile? Open your phone's SMS app:</span>
+                      <a
+                        href={smsDeepLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Send SMS via Mobile App</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 <input
@@ -582,13 +689,24 @@ export const AdminPage: React.FC = () => {
                 <span>Verify OTP & Log In</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setAuthMode('PHONE')}
-                className="w-full text-slate-400 hover:text-white text-xs text-center pt-1"
-              >
-                ← Use a different phone number
-              </button>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('PHONE')}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ← Use a different phone number
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSmsSettings(!showSmsSettings)}
+                  className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Configure SMS Gateway</span>
+                </button>
+              </div>
             </form>
           )}
 
