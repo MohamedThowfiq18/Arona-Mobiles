@@ -128,6 +128,12 @@ export interface BusinessConfigData {
   };
   googleMapsUrl: string;
   storeAnnouncement?: string;
+  socials?: {
+    instagram?: string;
+    facebook?: string;
+    youtube?: string;
+  };
+  promises?: Array<{ title: string; desc: string }>;
 }
 
 export interface PromoOffer {

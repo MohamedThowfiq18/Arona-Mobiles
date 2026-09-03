@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  ShieldCheck, 
-  PlusCircle, 
-  Upload, 
-  Trash2, 
-  CheckCircle2, 
-  Smartphone, 
-  Lock, 
-  Eye, 
+import {
+  ShieldCheck,
+  PlusCircle,
+  Upload,
+  Trash2,
+  CheckCircle2,
+  Smartphone,
+  Lock,
+  Eye,
   Sparkles,
   ArrowLeft,
   KeyRound,
@@ -21,19 +21,23 @@ import {
   MessageSquare,
   Server,
   LogOut,
-  Laptop
+  Laptop,
+  RefreshCw,
+  Key,
+  RotateCcw
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
-import { 
-  getStoredProducts, 
-  deleteProduct, 
-  updateProduct, 
-  resetProductsToDefault 
+import {
+  getStoredProducts,
+  deleteProduct,
+  updateProduct,
+  resetProductsToDefault,
+  addProduct
 } from '../data/productStore';
-import { 
-  getStoredBusinessConfig, 
-  saveBusinessConfig, 
-  getStoredOffers, 
+import {
+  getStoredBusinessConfig,
+  saveBusinessConfig,
+  getStoredOffers,
   saveOffers,
   saveOwnerPassword,
   pushActiveOtpToCloud,
@@ -42,10 +46,10 @@ import {
 } from '../data/masterStore';
 import { pushCloudProducts, pushCloudMasterData } from '../data/cloudStore';
 import { uploadImageToCloudStorage } from '../utils/cloudImageStorage';
-import { 
-  getCurrentSession, 
-  createOwnerSession, 
-  logoutCurrentDevice, 
+import {
+  getCurrentSession,
+  createOwnerSession,
+  logoutCurrentDevice,
   detectDeviceName,
   OwnerSession,
   ALLOWED_PHONE_NUMBERS
@@ -63,10 +67,13 @@ export const AdminPage: React.FC = () => {
     return safeSessionStorage.getItem('arona_owner_auth') === 'true';
   });
 
-  // Default to PHONE (Mobile OTP Login)
+  // Default to PASSWORD if a password was previously set, else PHONE
   const [authMode, setAuthMode] = useState<
     'PHONE' | 'OTP' | 'PASSWORD' | 'CREATE_PASSWORD' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'RESET_PASSWORD'
-  >('PHONE');
+  >(() => {
+    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+    return existingPassword ? 'PASSWORD' : 'PHONE';
+  });
 
   const [phone, setPhone] = useState<string>(() => safeLocalStorage.getItem('arona_owner_phone') || '');
   const [otpInput, setOtpInput] = useState('');
@@ -74,7 +81,7 @@ export const AdminPage: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   const [authError, setAuthError] = useState('');
   const [smsBanner, setSmsBanner] = useState('');
   const [smsDeepLink, setSmsDeepLink] = useState<string>('');
@@ -103,7 +110,7 @@ export const AdminPage: React.FC = () => {
   const [boxAvailable, setBoxAvailable] = useState(true);
   const [billAvailable, setBillAvailable] = useState(true);
   const [highlightsText, setHighlightsText] = useState('100% Genuine product\nVerified hardware inspection\nReady for immediate delivery');
-  
+
   // Image Upload State
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUrlInput, setImageUrlInput] = useState<string>('');
@@ -148,6 +155,10 @@ export const AdminPage: React.FC = () => {
     setSessionsList(getStoredSessions());
 
     const handleAuthUpdate = () => {
+      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+      if (existingPassword && authMode === 'PHONE') {
+        setAuthMode('PASSWORD');
+      }
       setSessionsList(getStoredSessions());
     };
 
@@ -165,7 +176,7 @@ export const AdminPage: React.FC = () => {
       window.removeEventListener('arona_master_data_updated', handleAuthUpdate);
       window.removeEventListener('arona_owner_session_revoked', handleSessionRevoked);
     };
-  }, []);
+  }, [authMode]);
 
   // Normalize phone number (strip spaces, hyphens, leading +)
   const cleanPhone = (num: string) => num.replace(/[\s\-\+\(\)]/g, '');
@@ -206,7 +217,7 @@ export const AdminPage: React.FC = () => {
     return code;
   };
 
-  // Step 1: Send OTP for Login -> Direct to OTP Input Screen
+  // Step 1: Send OTP for Login
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -220,7 +231,14 @@ export const AdminPage: React.FC = () => {
     }
 
     await triggerSmsOtp(phone, false);
-    setAuthMode('OTP');
+
+    // Check if owner already created a password
+    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+    if (existingPassword) {
+      setAuthMode('PASSWORD');
+    } else {
+      setAuthMode('OTP');
+    }
   };
 
   // Switch to OTP login mode manually
@@ -230,13 +248,17 @@ export const AdminPage: React.FC = () => {
     setAuthMode('OTP');
   };
 
-  // Step 2: Verify OTP -> Immediately Open Owner Portal
+  // Step 2: Verify OTP
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanInput = otpInput.trim();
-    if (cleanInput === generatedOtp || cleanInput.length === 6) {
+    if (otpInput.trim() === generatedOtp) {
       setAuthError('');
-      completeLogin();
+      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
+      if (existingPassword) {
+        completeLogin();
+      } else {
+        setAuthMode('CREATE_PASSWORD');
+      }
     } else {
       setAuthError('Invalid OTP code. Please enter the 6-digit verification code received on your mobile phone.');
     }
@@ -637,7 +659,7 @@ export const AdminPage: React.FC = () => {
 
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative">
-        
+
         {/* Top SMS Notification Banner */}
         {smsBanner && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 max-w-lg w-full z-40 bg-emerald-500 text-white font-mono text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-400">
@@ -647,11 +669,11 @@ export const AdminPage: React.FC = () => {
         )}
 
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
-          
+
           <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center mx-auto text-blue-400">
             <ShieldCheck className="w-8 h-8" />
           </div>
-          
+
           <div className="text-center">
             <h1 className="text-2xl font-bold text-white font-heading">ARONA Owner Portal</h1>
             <p className="text-slate-400 text-xs mt-1">Secure Owner Mobile OTP & Password Portal</p>
@@ -663,9 +685,8 @@ export const AdminPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => { setAuthMode('PASSWORD'); setAuthError(''); setSmsBanner(''); }}
-                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
-                  authMode === 'PASSWORD' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                }`}
+                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${authMode === 'PASSWORD' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Password</span>
@@ -675,9 +696,8 @@ export const AdminPage: React.FC = () => {
             <button
               type="button"
               onClick={() => { setAuthMode('PHONE'); setAuthError(''); setSmsBanner(''); }}
-              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
-                authMode === 'PHONE' || authMode === 'OTP' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${authMode === 'PHONE' || authMode === 'OTP' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                }`}
             >
               <Smartphone className="w-3.5 h-3.5" />
               <span>Mobile OTP</span>
@@ -686,11 +706,10 @@ export const AdminPage: React.FC = () => {
             <button
               type="button"
               onClick={handleStartForgotPassword}
-              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
-                authMode === 'FORGOT_PHONE' || authMode === 'FORGOT_OTP' || authMode === 'RESET_PASSWORD'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-amber-400 hover:text-amber-300'
-              }`}
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${authMode === 'FORGOT_PHONE' || authMode === 'FORGOT_OTP' || authMode === 'RESET_PASSWORD'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'text-amber-400 hover:text-amber-300'
+                }`}
             >
               <KeyRound className="w-3.5 h-3.5" />
               <span>Forgot Pass?</span>
@@ -856,7 +875,7 @@ export const AdminPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (phone.trim()) {
-                      handleSendResetOtp({ preventDefault: () => {} } as any);
+                      handleSendResetOtp({ preventDefault: () => { } } as any);
                     } else {
                       handleStartForgotPassword();
                     }
@@ -878,510 +897,505 @@ export const AdminPage: React.FC = () => {
             </form>
           )}
 
-          {/* FORGOT PASSWORD - STEP 1: PHONE VERIFICATION */}
-          {authMode === 'FORGOT_PHONE' && (
-            <form onSubmit={handleSendResetOtp} className="space-y-4 text-left">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
-                <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <span>Enter your registered owner mobile number (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17) to receive a Password Reset OTP via Mobile SMS.</span>
-              </div>
+        {/* FORGOT PASSWORD - STEP 1: PHONE VERIFICATION */}
+        {authMode === 'FORGOT_PHONE' && (
+          <form onSubmit={handleSendResetOtp} className="space-y-4 text-left">
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
+              <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <span>Enter your registered owner mobile number (+91 96XXXXXX06 / +91 99XXXXXX72 / +91 97XXXXXX17) to receive a Password Reset OTP via Mobile SMS.</span>
+            </div>
 
-              <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Registered Mobile Number</label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-sm">+91</span>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="Enter phone number (e.g. 99XXXXXX72)"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-amber-500 transition-all"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <Send className="w-4 h-4" />
-                <span>Send Reset OTP to Mobile</span>
-              </button>
-            </form>
-          )}
-
-          {/* FORGOT PASSWORD - STEP 2: OTP INPUT */}
-          {authMode === 'FORGOT_OTP' && (
-            <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-slate-300 text-xs font-semibold">Enter Password Reset OTP</label>
-                  <span className="text-amber-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
-                </div>
-
-                <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  <span>Password Reset OTP sent via SMS to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit code.</span>
-                </div>
-
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-1">Registered Mobile Number</label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-sm">+91</span>
                 <input
-                  type="text"
-                  maxLength={6}
+                  type="tel"
                   required
-                  placeholder="Enter 6-digit OTP from SMS"
-                  value={otpInput}
-                  onChange={(e) => setOtpInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-amber-400 transition-all"
+                  placeholder="Enter phone number (e.g. 99XXXXXX72)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-amber-500 transition-all"
                   autoFocus
                 />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>Verify OTP & Continue</span>
-              </button>
+            <button
+              type="submit"
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <Send className="w-4 h-4" />
+              <span>Send Reset OTP to Mobile</span>
+            </button>
+          </form>
+        )}
 
-              <button
-                type="button"
-                onClick={() => setAuthMode('FORGOT_PHONE')}
-                className="w-full text-slate-400 hover:text-white text-xs text-center pt-1"
-              >
-                ← Re-enter phone number
-              </button>
-            </form>
-          )}
-
-          {/* RESET PASSWORD - STEP 3: SET NEW PASSWORD */}
-          {authMode === 'RESET_PASSWORD' && (
-            <form onSubmit={handleSaveResetPassword} className="space-y-4 text-left">
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>Mobile Verified! Set your new Owner Password below.</span>
+        {/* FORGOT PASSWORD - STEP 2: OTP INPUT */}
+        {authMode === 'FORGOT_OTP' && (
+          <form onSubmit={handleVerifyResetOtp} className="space-y-4 text-left">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-slate-300 text-xs font-semibold">Enter Password Reset OTP</label>
+                <span className="text-amber-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
               </div>
 
-              <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">New Owner Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter new password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
-                  autoFocus
-                />
+              <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>Password Reset OTP sent via SMS to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit code.</span>
               </div>
 
-              <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Confirm New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Confirm new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+              <input
+                type="text"
+                maxLength={6}
+                required
+                placeholder="Enter 6-digit OTP from SMS"
+                value={otpInput}
+                onChange={(e) => setOtpInput(e.target.value)}
+                className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-amber-400 transition-all"
+                autoFocus
+              />
+            </div>
 
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <KeyRound className="w-4 h-4" />
-                <span>Save New Password & Enter Portal</span>
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <CheckCircle className="w-4 h-4" />
+              <span>Verify OTP & Continue</span>
+            </button>
 
-          {/* CREATE INITIAL OWNER PASSWORD */}
-          {authMode === 'CREATE_PASSWORD' && (
-            <form onSubmit={handleCreatePassword} className="space-y-4 text-left">
-              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-xs flex items-center gap-2">
-                <Key className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <span>Identity Verified! Set your secure Owner Password for future logins.</span>
-              </div>
+            <button
+              type="button"
+              onClick={() => setAuthMode('FORGOT_PHONE')}
+              className="w-full text-slate-400 hover:text-white text-xs text-center pt-1"
+            >
+              ← Re-enter phone number
+            </button>
+          </form>
+        )}
 
-              <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">New Owner Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Create password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
+        {/* RESET PASSWORD - STEP 3: SET NEW PASSWORD */}
+        {authMode === 'RESET_PASSWORD' && (
+          <form onSubmit={handleSaveResetPassword} className="space-y-4 text-left">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>Mobile Verified! Set your new Owner Password below.</span>
+            </div>
 
-              <div>
-                <label className="block text-slate-300 text-xs font-semibold mb-1">Confirm Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Confirm password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-1">New Owner Password</label>
+              <input
+                type="password"
+                required
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
+                autoFocus
+              />
+            </div>
 
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <KeyRound className="w-4 h-4" />
-                <span>Save Password & Open Portal</span>
-              </button>
-            </form>
-          )}
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-1">Confirm New Password</label>
+              <input
+                type="password"
+                required
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
 
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-            <Link to="/" className="hover:text-white flex items-center gap-1 transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Store
-            </Link>
-            <span className="font-mono text-slate-500 text-[10px]">ARONA Security v2.0</span>
-          </div>
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Save New Password & Enter Portal</span>
+            </button>
+          </form>
+        )}
 
+        {/* CREATE INITIAL OWNER PASSWORD */}
+        {authMode === 'CREATE_PASSWORD' && (
+          <form onSubmit={handleCreatePassword} className="space-y-4 text-left">
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-xs flex items-center gap-2">
+              <Key className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              <span>Identity Verified! Set your secure Owner Password for future logins.</span>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-1">New Owner Password</label>
+              <input
+                type="password"
+                required
+                placeholder="Create password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 text-xs font-semibold mb-1">Confirm Password</label>
+              <input
+                type="password"
+                required
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Save Password & Open Portal</span>
+            </button>
+          </form>
+        )}
+
+        <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <Link to="/" className="hover:text-white flex items-center gap-1 transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Store
+          </Link>
+          <span className="font-mono text-slate-500 text-[10px]">ARONA Security v2.0</span>
         </div>
+
       </div>
+      </div >
     );
   }
 
-  // ADMIN DASHBOARD CONTENT
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
-      {/* Admin Header Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-600/20 flex-shrink-0">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div className="text-left">
-              <h1 className="font-heading font-black text-lg sm:text-xl text-white leading-tight">ARONA OWNER PORTAL</h1>
-              <p className="text-slate-400 text-[11px] sm:text-xs">Logged in via {maskPhoneNumber(phone || '99XXXXXX72')}</p>
-            </div>
+// ADMIN DASHBOARD CONTENT
+return (
+  <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
+    {/* Admin Header Bar */}
+    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-600/20 flex-shrink-0">
+            <ShieldCheck className="w-6 h-6" />
           </div>
-
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
-            <Link 
-              to="/" 
-              target="_blank" 
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-all"
-            >
-              <Eye className="w-4 h-4 text-blue-400" />
-              <span>View Site</span>
-            </Link>
-
-            <button
-              onClick={handleLogout}
-              className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition-all"
-            >
-              Logout
-            </button>
+          <div className="text-left">
+            <h1 className="font-heading font-black text-lg sm:text-xl text-white leading-tight">ARONA OWNER PORTAL</h1>
+            <p className="text-slate-400 text-[11px] sm:text-xs">Logged in via {maskPhoneNumber(phone || '99XXXXXX72')}</p>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
-        
-        {/* Success Banner */}
-        {successMsg && (
-          <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 text-xs sm:text-sm animate-fade-in text-left">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
-            <span className="font-medium">{successMsg}</span>
-          </div>
-        )}
-
-        {/* Master Admin Navigation Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
-          <button
-            onClick={() => setAdminTab('mobiles')}
-            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
-              adminTab === 'mobiles' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:text-white'
-            }`}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
+          <Link
+            to="/"
+            target="_blank"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-all"
           >
-            <Smartphone className="w-4 h-4" />
-            <span>Mobiles ({products.length})</span>
-          </button>
+            <Eye className="w-4 h-4 text-blue-400" />
+            <span>View Site</span>
+          </Link>
 
           <button
-            onClick={() => setAdminTab('business')}
-            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
-              adminTab === 'business' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={handleLogout}
+            className="px-3.5 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition-all"
           >
-            <Settings className="w-4 h-4" />
-            <span>Store Info</span>
-          </button>
-
-          <button
-            onClick={() => setAdminTab('offers')}
-            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
-              adminTab === 'offers' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Offers ({offersList.filter(o => o.active).length})</span>
-          </button>
-
-          <button
-            onClick={() => setAdminTab('security')}
-            className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${
-              adminTab === 'security' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Security & Sessions</span>
+            Logout
           </button>
         </div>
+      </div>
+    </header>
 
-        {/* TAB 2: STORE & BUSINESS INFORMATION MANAGER */}
-        {adminTab === 'business' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-3xl mx-auto">
-            <div className="border-b border-slate-800 pb-4">
-              <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
-                <Settings className="w-5 h-5 text-purple-400" />
-                <span>Store Contact Info & Business Details</span>
-              </h2>
-              <p className="text-slate-400 text-xs mt-1">
-                Updates made here are saved to the persistent database and immediately update Navbar, Footer, and Contact buttons across the live site without redeploying.
-              </p>
-            </div>
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
 
-            <form onSubmit={handleSaveBusiness} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">WhatsApp Chat Number (Digits with country code)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 919787061617"
-                    value={bizWhatsapp}
-                    onChange={(e) => setBizWhatsapp(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono text-sm focus:outline-none focus:border-purple-500"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">Directly controls all WhatsApp order links</p>
-                </div>
+      {/* Success Banner */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 text-xs sm:text-sm animate-fade-in text-left">
+          <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
+          <span className="font-medium">{successMsg}</span>
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Store Phone Call Number</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. +91 96594 58606"
-                    value={bizPhone}
-                    onChange={(e) => setBizPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
+      {/* Master Admin Navigation Tabs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
+        <button
+          onClick={() => setAdminTab('mobiles')}
+          className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${adminTab === 'mobiles' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          <span>Mobiles ({products.length})</span>
+        </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Physical Store Address</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. ARONA Mobiles, Bank Road"
-                    value={bizAddress}
-                    onChange={(e) => setBizAddress(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
+        <button
+          onClick={() => setAdminTab('business')}
+          className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${adminTab === 'business' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>Store Info</span>
+        </button>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Landmark</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Near by Urankapatti Tea Stall"
-                    value={bizLandmark}
-                    onChange={(e) => setBizLandmark(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
+        <button
+          onClick={() => setAdminTab('offers')}
+          className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${adminTab === 'offers' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>Offers ({offersList.filter(o => o.active).length})</span>
+        </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Weekday Store Hours</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 10:00 AM – 9:30 PM"
-                    value={bizWeekdays}
-                    onChange={(e) => setBizWeekdays(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
+        <button
+          onClick={() => setAdminTab('security')}
+          className={`w-full py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 ${adminTab === 'security' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>Security & Sessions</span>
+        </button>
+      </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Weekend Store Hours</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 10:00 AM – 10:00 PM"
-                    value={bizWeekends}
-                    onChange={(e) => setBizWeekends(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
+      {/* TAB 2: STORE & BUSINESS INFORMATION MANAGER */}
+      {adminTab === 'business' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-3xl mx-auto">
+          <div className="border-b border-slate-800 pb-4">
+            <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
+              <Settings className="w-5 h-5 text-purple-400" />
+              <span>Store Contact Info & Business Details</span>
+            </h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Updates made here are saved to the persistent database and immediately update Navbar, Footer, and Contact buttons across the live site without redeploying.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveBusiness} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">WhatsApp Chat Number (Digits with country code)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 919787061617"
+                  value={bizWhatsapp}
+                  onChange={(e) => setBizWhatsapp(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono text-sm focus:outline-none focus:border-purple-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Directly controls all WhatsApp order links</p>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Homepage Store Subtext</label>
-                <textarea
-                  rows={2}
-                  value={bizSubtext}
-                  onChange={(e) => setBizSubtext(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500"
+                <label className="block text-slate-300 font-semibold mb-1">Store Phone Call Number</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. +91 96594 58606"
+                  value={bizPhone}
+                  onChange={(e) => setBizPhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Physical Store Address</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. ARONA Mobiles, Bank Road"
+                  value={bizAddress}
+                  onChange={(e) => setBizAddress(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Landmark</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Near by Urankapatti Tea Stall"
+                  value={bizLandmark}
+                  onChange={(e) => setBizLandmark(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Weekday Store Hours</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 10:00 AM – 9:30 PM"
+                  value={bizWeekdays}
+                  onChange={(e) => setBizWeekdays(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Weekend Store Hours</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 10:00 AM – 10:00 PM"
+                  value={bizWeekends}
+                  onChange={(e) => setBizWeekends(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Homepage Store Subtext</label>
+              <textarea
+                rows={2}
+                value={bizSubtext}
+                onChange={(e) => setBizSubtext(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <CheckCircle className="w-4 h-4" />
+              <span>Save Store Contact Info to Database</span>
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 3: BANNER OFFERS & DISCOUNTS MANAGER */}
+      {adminTab === 'offers' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit">
+            <div className="border-b border-slate-800 pb-4">
+              <h2 className="text-lg font-bold font-heading text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <span>Publish Promotional Banner Offer</span>
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">
+                Active banners appear instantly at the top of the live website homepage.
+              </p>
+            </div>
+
+            <form onSubmit={handleAddOffer} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Offer Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Festival Mobile Exchange Bonus"
+                  value={offerTitle}
+                  onChange={(e) => setOfferTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Subtitle / Details</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Get up to ₹5,000 extra trade-in value on upgrading"
+                  value={offerSubtitle}
+                  onChange={(e) => setOfferSubtitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Badge Text</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. LIMITED TIME OFFER"
+                    value={offerBadge}
+                    onChange={(e) => setOfferBadge(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Discount Tag</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EXTRA ₹5000 OFF"
+                    value={offerDiscountTag}
+                    onChange={(e) => setOfferDiscountTag(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
               >
-                <CheckCircle className="w-4 h-4" />
-                <span>Save Store Contact Info to Database</span>
+                <PlusCircle className="w-4 h-4" />
+                <span>Publish Offer Banner Live</span>
               </button>
             </form>
           </div>
-        )}
 
-        {/* TAB 3: BANNER OFFERS & DISCOUNTS MANAGER */}
-        {adminTab === 'offers' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
-            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit">
-              <div className="border-b border-slate-800 pb-4">
-                <h2 className="text-lg font-bold font-heading text-white flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-amber-400" />
-                  <span>Publish Promotional Banner Offer</span>
-                </h2>
-                <p className="text-slate-400 text-xs mt-1">
-                  Active banners appear instantly at the top of the live website homepage.
-                </p>
+          <div className="lg:col-span-7 space-y-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-heading font-bold text-white text-base">Active Live Offers</h3>
+                <p className="text-slate-400 text-xs">{offersList.length} Promo Banners in Database</p>
               </div>
-
-              <form onSubmit={handleAddOffer} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Offer Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Festival Mobile Exchange Bonus"
-                    value={offerTitle}
-                    onChange={(e) => setOfferTitle(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Subtitle / Details</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Get up to ₹5,000 extra trade-in value on upgrading"
-                    value={offerSubtitle}
-                    onChange={(e) => setOfferSubtitle(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Badge Text</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. LIMITED TIME OFFER"
-                      value={offerBadge}
-                      onChange={(e) => setOfferBadge(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Discount Tag</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. EXTRA ₹5000 OFF"
-                      value={offerDiscountTag}
-                      onChange={(e) => setOfferDiscountTag(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-bold focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Publish Offer Banner Live</span>
-                </button>
-              </form>
             </div>
 
-            <div className="lg:col-span-7 space-y-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <h3 className="font-heading font-bold text-white text-base">Active Live Offers</h3>
-                  <p className="text-slate-400 text-xs">{offersList.length} Promo Banners in Database</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {offersList.map(off => (
-                  <div key={off.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4">
-                    <div className="space-y-1 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-amber-400/20 text-amber-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-400/30">
-                          {off.badge}
-                        </span>
-                        <span className="font-bold text-white text-sm">{off.title}</span>
-                      </div>
-                      <p className="text-slate-400 text-xs">{off.subtitle}</p>
-                      {off.discountTag && (
-                        <span className="inline-block text-emerald-400 font-bold text-xs">{off.discountTag}</span>
-                      )}
-                    </div>
-
+            <div className="space-y-3">
+              {offersList.map(off => (
+                <div key={off.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                  <div className="space-y-1 text-left">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleToggleOffer(off.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                          off.active 
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white' 
-                            : 'bg-slate-800 border-slate-700 text-slate-400'
-                        }`}
-                      >
-                        {off.active ? 'Active' : 'Disabled'}
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteOffer(off.id)}
-                        className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 border border-slate-700 text-slate-400 hover:text-rose-400 transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <span className="bg-amber-400/20 text-amber-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-400/30">
+                        {off.badge}
+                      </span>
+                      <span className="font-bold text-white text-sm">{off.title}</span>
                     </div>
+                    <p className="text-slate-400 text-xs">{off.subtitle}</p>
+                    {off.discountTag && (
+                      <span className="inline-block text-emerald-400 font-bold text-xs">{off.discountTag}</span>
+                    )}
                   </div>
-                ))}
-              </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleOffer(off.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${off.active
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                        }`}
+                    >
+                      {off.active ? 'Active' : 'Disabled'}
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteOffer(off.id)}
+                      className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 border border-slate-700 text-slate-400 hover:text-rose-400 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB 1: MOBILES CATALOG MANAGER */}
-        {adminTab === 'mobiles' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            {/* UPLOAD / EDIT FORM COLUMN */}
-            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit text-left">
-            
+      {/* TAB 1: MOBILES CATALOG MANAGER */}
+      {adminTab === 'mobiles' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+          {/* UPLOAD / EDIT FORM COLUMN */}
+          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit text-left">
+
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2 text-blue-400 font-heading font-bold text-lg">
                 {editingProductId ? <Edit className="w-5 h-5 text-amber-400" /> : <PlusCircle className="w-5 h-5 text-blue-500" />}
@@ -1399,21 +1413,21 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
-              
+
               {/* Photo Upload Section */}
               <div className="space-y-2">
                 <label className="block text-slate-300 font-medium">Device Photo (Upload compressed file or URL)</label>
-                
+
                 <div className="grid grid-cols-1 gap-3">
                   <label className="border-2 border-dashed border-slate-700 hover:border-blue-500 bg-slate-950/60 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all">
                     <Upload className="w-6 h-6 text-blue-400 mb-1" />
                     <span className="text-slate-300 font-semibold">Choose photo from phone / PC</span>
                     <span className="text-slate-500 text-[10px]">PNG, JPG, WEBP formats (Auto-compressed for permanent storage)</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileUpload} 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
                     />
                   </label>
 
@@ -1480,22 +1494,20 @@ export const AdminPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setCondition('new')}
-                    className={`py-2 rounded-xl font-bold transition-all ${
-                      condition === 'new'
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                        : 'bg-slate-950 text-slate-400 border border-slate-800'
-                    }`}
+                    className={`py-2 rounded-xl font-bold transition-all ${condition === 'new'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
                   >
                     ✨ Brand New
                   </button>
                   <button
                     type="button"
                     onClick={() => setCondition('used')}
-                    className={`py-2 rounded-xl font-bold transition-all ${
-                      condition === 'used'
-                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                        : 'bg-slate-950 text-slate-400 border border-slate-800'
-                    }`}
+                    className={`py-2 rounded-xl font-bold transition-all ${condition === 'used'
+                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
                   >
                     Certified Pre-Owned
                   </button>
@@ -1596,20 +1608,20 @@ export const AdminPage: React.FC = () => {
 
                   <div className="flex items-center gap-4 text-slate-300 pt-1">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={boxAvailable} 
-                        onChange={(e) => setBoxAvailable(e.target.checked)} 
+                      <input
+                        type="checkbox"
+                        checked={boxAvailable}
+                        onChange={(e) => setBoxAvailable(e.target.checked)}
                         className="rounded accent-purple-600"
                       />
                       <span>Original Box</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={billAvailable} 
-                        onChange={(e) => setBillAvailable(e.target.checked)} 
+                      <input
+                        type="checkbox"
+                        checked={billAvailable}
+                        onChange={(e) => setBillAvailable(e.target.checked)}
                         className="rounded accent-purple-600"
                       />
                       <span>Original Bill</span>
@@ -1621,11 +1633,10 @@ export const AdminPage: React.FC = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm ${
-                  editingProductId
-                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30'
-                    : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
-                }`}
+                className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm ${editingProductId
+                  ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30'
+                  : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                  }`}
               >
                 {editingProductId ? <Edit className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
                 <span>{editingProductId ? 'Update Mobile & Publish Photo' : 'Publish Mobile to Store'}</span>
@@ -1636,7 +1647,7 @@ export const AdminPage: React.FC = () => {
 
           {/* INVENTORY LIST COLUMN */}
           <div className="lg:col-span-7 space-y-4 text-left">
-            
+
             <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl p-4">
               <div>
                 <h3 className="font-heading font-bold text-white text-base">Active Store Catalog</h3>
@@ -1656,25 +1667,23 @@ export const AdminPage: React.FC = () => {
             {/* Inventory List */}
             <div className="space-y-3">
               {products.map((prod) => (
-                <div 
-                  key={prod.id} 
-                  className={`bg-slate-900 border rounded-2xl p-4 flex items-center justify-between gap-4 transition-all ${
-                    editingProductId === prod.id ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-800 hover:border-slate-700'
-                  }`}
+                <div
+                  key={prod.id}
+                  className={`bg-slate-900 border rounded-2xl p-4 flex items-center justify-between gap-4 transition-all ${editingProductId === prod.id ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-800 hover:border-slate-700'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
-                    <img 
-                      src={prod.images[0]} 
-                      alt={prod.name} 
-                      className="w-14 h-14 object-cover rounded-xl bg-slate-950 border border-slate-800 flex-shrink-0" 
+                    <img
+                      src={prod.images[0]}
+                      alt={prod.name}
+                      className="w-14 h-14 object-cover rounded-xl bg-slate-950 border border-slate-800 flex-shrink-0"
                     />
-                    
+
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-white text-sm">{prod.name}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                          prod.condition === 'new' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                        }`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${prod.condition === 'new' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          }`}>
                           {prod.condition === 'new' ? 'New' : `Used (${prod.batteryHealth}% Batt)`}
                         </span>
                       </div>
@@ -1701,11 +1710,10 @@ export const AdminPage: React.FC = () => {
 
                     <button
                       onClick={() => handleToggleStock(prod.id, prod.inStock)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                        prod.inStock 
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white' 
-                          : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white'
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${prod.inStock
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white'
+                        }`}
                     >
                       {prod.inStock ? 'In Stock' : 'Out of Stock'}
                     </button>
@@ -1725,127 +1733,125 @@ export const AdminPage: React.FC = () => {
           </div>
 
         </div>
-        )}
+      )}
 
-        {/* TAB 4: SECURITY & AUTHORIZED DEVICE SESSIONS */}
-        {adminTab === 'security' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-4xl mx-auto">
-            <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
-                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                  <span>Owner Account Security & Authorized Sessions</span>
-                </h2>
-                <p className="text-slate-400 text-xs mt-1">Manage physical devices authorized to access the Owner Portal</p>
-              </div>
-              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1 rounded-full font-mono font-bold">
-                ● REALTIME AUTH GUARD
-              </span>
+      {/* TAB 4: SECURITY & AUTHORIZED DEVICE SESSIONS */}
+      {adminTab === 'security' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-4xl mx-auto">
+          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
+                <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                <span>Owner Account Security & Authorized Sessions</span>
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">Manage physical devices authorized to access the Owner Portal</p>
             </div>
-
-            {/* Current Device Card */}
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                    <Laptop className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm">{detectDeviceName()}</span>
-                      <span className="bg-blue-500/20 text-blue-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
-                        Current Device
-                      </span>
-                    </div>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      Session Active • Logged in via OTP verification
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Session Management Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                onClick={handleLogout}
-                className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
-              >
-                <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out This Device</span>
-                </div>
-                <p className="text-slate-400 text-[11px]">Log out from this browser session</p>
-              </button>
-
-              <button
-                onClick={handleSignOutOtherDevices}
-                className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
-              >
-                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-                  <Server className="w-4 h-4" />
-                  <span>Sign Out Other Devices</span>
-                </div>
-                <p className="text-slate-400 text-[11px]">Revoke sessions on all other phones/laptops</p>
-              </button>
-
-              <button
-                onClick={handleRevokeAllSessions}
-                className="p-4 bg-slate-950 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 rounded-2xl text-left transition-all space-y-1"
-              >
-                <div className="flex items-center gap-2 text-rose-500 font-bold text-xs">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Revoke All Sessions</span>
-                </div>
-                <p className="text-slate-400 text-[11px]">Force OTP re-authentication everywhere</p>
-              </button>
-            </div>
-
-            {/* Active Devices List */}
-            <div className="space-y-3 pt-2">
-              <h3 className="text-slate-300 font-bold text-sm">Authorized Device Session Register ({sessionsList.length})</h3>
-              
-              {sessionsList.length === 0 ? (
-                <p className="text-slate-500 text-xs">No remote sessions recorded.</p>
-              ) : (
-                <div className="space-y-2">
-                  {sessionsList.map(session => (
-                    <div
-                      key={session.sessionId}
-                      className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                        session.active
-                          ? 'bg-slate-950 border-slate-800 text-slate-200'
-                          : 'bg-slate-950/40 border-slate-900 text-slate-600 line-through'
-                      }`}
-                    >
-                      <div className="space-y-1 text-left">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{session.deviceName}</span>
-                          {session.rememberMe && (
-                            <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-mono">
-                              Remembered
-                            </span>
-                          )}
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                            session.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 text-rose-500'
-                          }`}>
-                            {session.active ? 'Active' : 'Revoked'}
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-[11px]">
-                          Authorized for +91 {session.phone.slice(-10)} • Login: {new Date(session.createdAt).toLocaleTimeString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1 rounded-full font-mono font-bold">
+              ● REALTIME AUTH GUARD
+            </span>
           </div>
-        )}
 
-      </main>
-    </div>
-  );
+          {/* Current Device Card */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-sm">{detectDeviceName()}</span>
+                    <span className="bg-blue-500/20 text-blue-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                      Current Device
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    Session Active • Logged in via OTP verification
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Session Management Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              onClick={handleLogout}
+              className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
+            >
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out This Device</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">Log out from this browser session</p>
+            </button>
+
+            <button
+              onClick={handleSignOutOtherDevices}
+              className="p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all space-y-1"
+            >
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                <Server className="w-4 h-4" />
+                <span>Sign Out Other Devices</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">Revoke sessions on all other phones/laptops</p>
+            </button>
+
+            <button
+              onClick={handleRevokeAllSessions}
+              className="p-4 bg-slate-950 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 rounded-2xl text-left transition-all space-y-1"
+            >
+              <div className="flex items-center gap-2 text-rose-500 font-bold text-xs">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Revoke All Sessions</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">Force OTP re-authentication everywhere</p>
+            </button>
+          </div>
+
+          {/* Active Devices List */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-slate-300 font-bold text-sm">Authorized Device Session Register ({sessionsList.length})</h3>
+
+            {sessionsList.length === 0 ? (
+              <p className="text-slate-500 text-xs">No remote sessions recorded.</p>
+            ) : (
+              <div className="space-y-2">
+                {sessionsList.map(session => (
+                  <div
+                    key={session.sessionId}
+                    className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs ${session.active
+                      ? 'bg-slate-950 border-slate-800 text-slate-200'
+                      : 'bg-slate-950/40 border-slate-900 text-slate-600 line-through'
+                      }`}
+                  >
+                    <div className="space-y-1 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">{session.deviceName}</span>
+                        {session.rememberMe && (
+                          <span className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-mono">
+                            Remembered
+                          </span>
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${session.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 text-rose-500'
+                          }`}>
+                          {session.active ? 'Active' : 'Revoked'}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[11px]">
+                        Authorized for +91 {session.phone.slice(-10)} • Login: {new Date(session.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+    </main>
+  </div>
+);
 };
