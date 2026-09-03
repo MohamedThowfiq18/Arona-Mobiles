@@ -81,8 +81,62 @@ export function initRealtimeGlobalSync(onDataReceived?: (data: MasterDataPayload
     console.warn('Realtime initialization warning:', err);
   }
 
-  // Network Offline / Reconnect Handling & Periodic Sync Safety Net
+  // Network Offline / Reconnect Handling & High-Frequency Real-Time Sync Engine
   if (typeof window !== 'undefined') {
+    let lastSyncedTimestamp = 0;
+
+    // Multi-tab 0ms local sync via BroadcastChannel
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const bc = new BroadcastChannel('arona_global_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.data) {
+            activeMasterDataCache = event.data.data;
+            notifyLocalDataUpdated();
+          }
+        };
+      } catch (e) {}
+    }
+
+    // High-Frequency Cross-Device Cloud DB Sync Pulse (Every 1.5s)
+    setInterval(() => {
+      if (navigator.onLine) {
+        fetchCloudMasterData().then(data => {
+          if (data && data.lastUpdated && data.lastUpdated > lastSyncedTimestamp) {
+            console.log('⚡ Live Cross-Device Sync Received from Cloud DB:', data.lastUpdated);
+            lastSyncedTimestamp = data.lastUpdated;
+            activeMasterDataCache = data;
+            notifyLocalDataUpdated();
+          }
+        }).catch(e => console.warn('Sync pulse notice:', e));
+      }
+    }, 1500);
+
+    // Instant Sync on Tab Focus / Visibility
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        fetchCloudMasterData().then(data => {
+          if (data && data.lastUpdated && data.lastUpdated > lastSyncedTimestamp) {
+            lastSyncedTimestamp = data.lastUpdated;
+            activeMasterDataCache = data;
+            notifyLocalDataUpdated();
+          }
+        });
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (navigator.onLine) {
+        fetchCloudMasterData().then(data => {
+          if (data && data.lastUpdated && data.lastUpdated > lastSyncedTimestamp) {
+            lastSyncedTimestamp = data.lastUpdated;
+            activeMasterDataCache = data;
+            notifyLocalDataUpdated();
+          }
+        });
+      }
+    });
+
     window.addEventListener('online', () => {
       console.log('🌐 Network reconnected! Re-syncing live database state...');
       dispatchConnectionState(true);
@@ -98,19 +152,6 @@ export function initRealtimeGlobalSync(onDataReceived?: (data: MasterDataPayload
       console.warn('⚠️ Network offline connection paused');
       dispatchConnectionState(false);
     });
-
-    // Periodic silent sync safety net (every 10s)
-    setInterval(() => {
-      if (navigator.onLine) {
-        fetchCloudMasterData().then(data => {
-          if (data && JSON.stringify(data) !== JSON.stringify(activeMasterDataCache)) {
-            console.log('🔄 Periodic Cloud Sync Re-alignment');
-            activeMasterDataCache = data;
-            notifyLocalDataUpdated();
-          }
-        }).catch(e => console.warn('Periodic sync check:', e));
-      }
-    }, 10000);
   }
 }
 
@@ -135,7 +176,6 @@ function notifyLocalDataUpdated() {
  * Fetch the master payload directly from the Cloud Database (Single Source of Truth)
  */
 export async function fetchCloudMasterData(): Promise<MasterDataPayload | null> {
-  // 1. Attempt REST Cloud DB fetch
   try {
     const res = await fetch(PRIMARY_REST_URL, {
       cache: 'no-store',
@@ -159,31 +199,40 @@ export async function fetchCloudMasterData(): Promise<MasterDataPayload | null> 
  * Push updated master payload to Cloud DB & Broadcast Realtime Event to ALL connected devices globally
  */
 export async function pushCloudMasterData(payload: MasterDataPayload): Promise<boolean> {
+  const now = Date.now();
   const fullPayload: MasterDataPayload = {
     ...payload,
-    lastUpdated: Date.now()
+    lastUpdated: now
   };
 
   activeMasterDataCache = fullPayload;
 
-  // 1. Broadcast REAL-TIME EVENT to all connected clients worldwide instantly
+  // 1. Broadcast locally via BroadcastChannel for 0ms multi-tab sync
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const bc = new BroadcastChannel('arona_global_channel');
+      bc.postMessage({ event: 'master_data_update', data: fullPayload });
+      bc.close();
+    } catch (e) {}
+  }
+
+  // 2. Broadcast via Supabase Realtime channel
   if (realtimeChannel) {
     try {
       await realtimeChannel.send({
         type: 'broadcast',
         event: 'master_data_update',
-        payload: { data: fullPayload, timestamp: Date.now() }
+        payload: { data: fullPayload, timestamp: now }
       });
-      console.log('🚀 REALTIME BROADCAST SENT TO ALL CONNECTED CLIENTS');
     } catch (err) {
       console.warn('Realtime broadcast notice:', err);
     }
   }
 
-  // 2. Persist to Cloud Database
+  // 3. Persist to Cloud Database via PATCH (supported 200 OK)
   try {
     const res = await fetch(PRIMARY_REST_URL, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'arona_mobiles_master_database',
@@ -193,6 +242,16 @@ export async function pushCloudMasterData(payload: MasterDataPayload): Promise<b
     if (res.ok) {
       notifyLocalDataUpdated();
       return true;
+    } else {
+      // Fallback PUT if PATCH returns non-ok status
+      await fetch(PRIMARY_REST_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'arona_mobiles_master_database',
+          data: fullPayload
+        })
+      });
     }
   } catch (err) {
     console.warn('Cloud DB push notice:', err);
