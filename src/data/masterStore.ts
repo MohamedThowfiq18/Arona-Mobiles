@@ -5,6 +5,7 @@ import { SAMPLE_SERVICES } from './services';
 import { BUSINESS_CONFIG } from '../config/business';
 import { fetchCloudMasterData, pushCloudMasterData, MasterDataPayload } from './cloudStore';
 import { OwnerSession } from '../utils/ownerAuth';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 export const SAMPLE_OFFERS: PromoOffer[] = [
   {
@@ -26,9 +27,29 @@ export const SAMPLE_OFFERS: PromoOffer[] = [
   }
 ];
 
+const PRODUCTS_STORAGE_KEY = 'arona_master_products_v3';
+let isHydratedFromCloud = false;
+
+// Load initial products from persistent local storage or fall back to SAMPLE_PRODUCTS
+function loadInitialProducts(): Product[] {
+  try {
+    const stored = safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        isHydratedFromCloud = true;
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading initial stored products:', err);
+  }
+  return SAMPLE_PRODUCTS;
+}
+
 // In-memory master state mirror (hydrated from live Cloud DB)
 let masterMemoryCache: MasterDataPayload = {
-  products: SAMPLE_PRODUCTS,
+  products: loadInitialProducts(),
   businessConfig: BUSINESS_CONFIG as BusinessConfigData,
   offers: SAMPLE_OFFERS,
   accessories: SAMPLE_ACCESSORIES,
@@ -41,7 +62,9 @@ if (typeof window !== 'undefined') {
   fetchCloudMasterData().then(cloudData => {
     if (cloudData) {
       if (Array.isArray(cloudData.products)) {
+        isHydratedFromCloud = true;
         masterMemoryCache.products = cloudData.products;
+        safeLocalStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(cloudData.products));
       }
       if (cloudData.businessConfig && cloudData.businessConfig.phone) {
         masterMemoryCache.businessConfig = cloudData.businessConfig;
@@ -66,7 +89,9 @@ if (typeof window !== 'undefined') {
     fetchCloudMasterData().then(data => {
       if (data) {
         if (data.products && Array.isArray(data.products)) {
+          isHydratedFromCloud = true;
           masterMemoryCache.products = data.products;
+          safeLocalStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(data.products));
         }
         if (data.businessConfig) masterMemoryCache.businessConfig = data.businessConfig;
         if (data.offers) masterMemoryCache.offers = data.offers;
@@ -86,16 +111,21 @@ function notifyUpdate(eventName: string) {
 }
 
 /**
- * 1. Products Management (Single Source of Truth: Cloud DB)
+ * 1. Products Management (Single Source of Truth: Cloud DB + Local Persistent Mirror)
  */
 export function getStoredProducts(): Product[] {
+  if (isHydratedFromCloud || safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY) !== null) {
+    return masterMemoryCache.products || [];
+  }
   return masterMemoryCache.products && masterMemoryCache.products.length > 0
     ? masterMemoryCache.products
     : SAMPLE_PRODUCTS;
 }
 
 export function saveProducts(products: Product[], syncToCloud = true): void {
+  isHydratedFromCloud = true;
   masterMemoryCache.products = products;
+  safeLocalStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
   notifyUpdate('arona_products_updated');
   if (syncToCloud) {
     pushCurrentMasterDataToCloud().catch(e => console.warn('Cloud sync err:', e));
