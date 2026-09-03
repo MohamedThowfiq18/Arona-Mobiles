@@ -104,9 +104,8 @@ export async function syncProductsWithCloud(): Promise<Product[]> {
     console.warn('Cloud store sync error:', error);
   }
   
-  const currentLocal = getStoredProducts();
-  pushCloudProducts(currentLocal).catch(() => {});
-  return currentLocal;
+  // Return local stored products WITHOUT overwriting the cloud store if cloud fetch failed
+  return getStoredProducts();
 }
 
 // Auto-sync on window load and periodically
@@ -119,8 +118,8 @@ if (typeof window !== 'undefined') {
     syncProductsWithCloud();
   });
 
-  // Sync every 10 seconds
+  // Sync every 4 seconds so visitors see new/edited mobiles live
   setInterval(() => {
     syncProductsWithCloud();
-  }, 10000);
+  }, 4000);
 }

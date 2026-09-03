@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
 import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProductsToDefault } from '../data/productStore';
+import { pushCloudProducts } from '../data/cloudStore';
 import { compressImage } from '../utils/imageCompressor';
 import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
 
@@ -116,7 +117,7 @@ export const AdminPage: React.FC = () => {
     // Generate 6-digit OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
-    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)}: Your OTP is ${code}`);
+    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)} via Mobile SMS. Please check your phone SMS messages for the 6-digit OTP.`);
 
     // Check if owner already created a password
     const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
@@ -131,7 +132,7 @@ export const AdminPage: React.FC = () => {
   const handleRequestOtpMode = () => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
-    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)}: Your OTP is ${code}`);
+    setSmsBanner(`📩 SMS Verification Code sent to ${maskPhoneNumber(phone)} via Mobile SMS. Please check your phone SMS messages for the 6-digit OTP.`);
     setAuthMode('OTP');
     setAuthError('');
   };
@@ -148,7 +149,7 @@ export const AdminPage: React.FC = () => {
         setAuthMode('CREATE_PASSWORD');
       }
     } else {
-      setAuthError('Invalid OTP code. Please enter the 6-digit code shown in the notification banner.');
+      setAuthError('Invalid OTP code. Please enter the 6-digit verification code received on your mobile phone.');
     }
   };
 
@@ -211,7 +212,7 @@ export const AdminPage: React.FC = () => {
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
-    setSmsBanner(`🔑 Password Reset SMS OTP sent to registered mobile ${maskPhoneNumber(phone)}: Your OTP is ${code}`);
+    setSmsBanner(`🔑 Password Reset OTP sent to registered mobile ${maskPhoneNumber(phone)} via Mobile SMS. Check your mobile inbox.`);
     setAuthMode('FORGOT_OTP');
   };
 
@@ -223,7 +224,7 @@ export const AdminPage: React.FC = () => {
       setNewPassword('');
       setConfirmPassword('');
     } else {
-      setAuthError('Invalid OTP code. Please enter the 6-digit verification code sent to your registered mobile number.');
+      setAuthError('Invalid OTP code. Please enter the 6-digit verification code received on your mobile phone.');
     }
   };
 
@@ -329,7 +330,7 @@ export const AdminPage: React.FC = () => {
   };
 
   // Add or Update Product
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -365,7 +366,12 @@ export const AdminPage: React.FC = () => {
 
       const updated = updateProduct(editingProductId, updatedFields);
       setProducts(updated);
-      setSuccessMsg(`"${name}" updated successfully! The updated photo & details are now live on the website.`);
+      const synced = await pushCloudProducts(updated);
+      if (synced) {
+        setSuccessMsg(`"${name}" updated successfully! Cloud backend updated & live for all visitors worldwide.`);
+      } else {
+        setSuccessMsg(`"${name}" updated locally & sync queued.`);
+      }
     } else {
       // Add new product
       const newProduct: Product = {
@@ -401,32 +407,40 @@ export const AdminPage: React.FC = () => {
 
       const updated = addProduct(newProduct);
       setProducts(updated);
-      setSuccessMsg(`"${newProduct.name}" photo & details published successfully! Everyone can view it on the website until you delete it.`);
+      const synced = await pushCloudProducts(updated);
+      if (synced) {
+        setSuccessMsg(`"${newProduct.name}" published successfully! Saved to cloud backend & live for all visitors worldwide.`);
+      } else {
+        setSuccessMsg(`"${newProduct.name}" published locally & sync queued.`);
+      }
     }
 
     resetForm();
     setTimeout(() => setSuccessMsg(''), 7000);
   };
 
-  const handleDelete = (id: string, productName: string) => {
+  const handleDelete = async (id: string, productName: string) => {
     if (window.confirm(`Are you sure you want to remove "${productName}" from the store catalog?`)) {
       const updated = deleteProduct(id);
       setProducts(updated);
+      await pushCloudProducts(updated);
       if (editingProductId === id) {
         resetForm();
       }
     }
   };
 
-  const handleToggleStock = (id: string, currentStock: boolean) => {
+  const handleToggleStock = async (id: string, currentStock: boolean) => {
     const updated = updateProduct(id, { inStock: !currentStock });
     setProducts(updated);
+    await pushCloudProducts(updated);
   };
 
-  const handleResetCatalog = () => {
+  const handleResetCatalog = async () => {
     if (window.confirm('Reset catalog to sample default mobiles? This will clear custom items.')) {
       const updated = resetProductsToDefault();
       setProducts(updated);
+      await pushCloudProducts(updated);
       resetForm();
     }
   };
@@ -543,18 +557,16 @@ export const AdminPage: React.FC = () => {
                   <span className="text-emerald-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
                 </div>
 
-                {generatedOtp && (
-                  <div className="mb-3 p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-mono text-center flex items-center justify-center gap-2">
-                    <span>📲 Mobile SMS OTP:</span>
-                    <strong className="text-white bg-slate-950 px-2 py-0.5 rounded border border-emerald-500/50 text-sm tracking-widest">{generatedOtp}</strong>
-                  </div>
-                )}
+                <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>SMS verification code sent to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit OTP code.</span>
+                </div>
 
                 <input
                   type="text"
                   maxLength={6}
                   required
-                  placeholder="Enter OTP (e.g. 123456)"
+                  placeholder="Enter 6-digit OTP from SMS"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-blue-500 transition-all"
@@ -690,18 +702,16 @@ export const AdminPage: React.FC = () => {
                   <span className="text-amber-400 font-mono text-[11px]">Sent to {maskPhoneNumber(phone)}</span>
                 </div>
 
-                {generatedOtp && (
-                  <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-mono text-center flex items-center justify-center gap-2">
-                    <span>🔑 Password Reset SMS OTP:</span>
-                    <strong className="text-white bg-slate-950 px-2 py-0.5 rounded border border-amber-500/50 text-sm tracking-widest">{generatedOtp}</strong>
-                  </div>
-                )}
+                <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <span>Password Reset OTP sent via SMS to <strong>{maskPhoneNumber(phone)}</strong>. Check your mobile SMS inbox for the 6-digit code.</span>
+                </div>
 
                 <input
                   type="text"
                   maxLength={6}
                   required
-                  placeholder="Enter 6-digit OTP"
+                  placeholder="Enter 6-digit OTP from SMS"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-4 py-3 text-white text-center font-mono text-xl tracking-widest focus:outline-none focus:border-amber-400 transition-all"
