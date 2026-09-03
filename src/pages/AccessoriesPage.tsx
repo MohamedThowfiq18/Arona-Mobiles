@@ -1,15 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Headphones, MessageSquare } from 'lucide-react';
-import { SAMPLE_ACCESSORIES } from '../data/accessories';
+import { getStoredAccessories } from '../data/masterStore';
 import { getWhatsAppUrl } from '../config/business';
+import { AccessoryItem } from '../types';
 
 export const AccessoriesPage: React.FC = () => {
+  const [accessories, setAccessories] = useState<AccessoryItem[]>(getStoredAccessories);
   const [activeCategory, setActiveCategory] = useState('All');
+
+  useEffect(() => {
+    const handleUpdate = () => setAccessories(getStoredAccessories());
+    window.addEventListener('arona_accessories_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_accessories_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
+  }, []);
+
   const categories = ['All', 'Chargers', 'Earbuds', 'Cases', 'Power Banks', 'Screen Protection'];
 
   const filtered = activeCategory === 'All'
-    ? SAMPLE_ACCESSORIES
-    : SAMPLE_ACCESSORIES.filter(a => a.category === activeCategory);
+    ? accessories
+    : accessories.filter(a => a.category === activeCategory);
 
   return (
     <div className="pt-28 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -65,7 +78,7 @@ export const AccessoriesPage: React.FC = () => {
                 <a
                   href={waUrl}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all"
                   title="Inquire on WhatsApp"
                 >

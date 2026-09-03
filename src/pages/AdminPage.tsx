@@ -24,11 +24,24 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { Product, ProductCondition, UsedGrade } from '../types';
-import { getStoredProducts, addProduct, deleteProduct, updateProduct, resetProductsToDefault } from '../data/productStore';
-import { pushCloudProducts } from '../data/cloudStore';
+import { 
+  getStoredProducts, 
+  addProduct, 
+  deleteProduct, 
+  updateProduct, 
+  resetProductsToDefault 
+} from '../data/productStore';
+import { 
+  getStoredBusinessConfig, 
+  saveBusinessConfig, 
+  getStoredOffers, 
+  saveOffers 
+} from '../data/masterStore';
+import { pushCloudProducts, pushCloudMasterData } from '../data/cloudStore';
 import { compressImage } from '../utils/imageCompressor';
 import { safeLocalStorage, safeSessionStorage } from '../utils/safeStorage';
 import { sendRealSmsOtp, showSystemNotification } from '../utils/smsService';
+import { PromoOffer, BusinessConfigData } from '../types';
 
 // Authorized Owner Phone Numbers
 const ALLOWED_PHONE_NUMBERS = [
@@ -44,6 +57,9 @@ const ALLOWED_PHONE_NUMBERS = [
 ];
 
 export const AdminPage: React.FC = () => {
+  // Navigation Tab State
+  const [adminTab, setAdminTab] = useState<'mobiles' | 'business' | 'offers'>('mobiles');
+
   // Authentication Flow State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return safeSessionStorage.getItem('arona_owner_auth') === 'true';
@@ -94,8 +110,37 @@ export const AdminPage: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUrlInput, setImageUrlInput] = useState<string>('');
 
+  // Business Config Manager State
+  const [bizConfig, setBizConfig] = useState<BusinessConfigData>(getStoredBusinessConfig);
+  const [bizPhone, setBizPhone] = useState('');
+  const [bizWhatsapp, setBizWhatsapp] = useState('');
+  const [bizAddress, setBizAddress] = useState('');
+  const [bizLandmark, setBizLandmark] = useState('');
+  const [bizTagline, setBizTagline] = useState('');
+  const [bizSubtext, setBizSubtext] = useState('');
+  const [bizWeekdays, setBizWeekdays] = useState('');
+  const [bizWeekends, setBizWeekends] = useState('');
+
+  // Offers Manager State
+  const [offersList, setOffersList] = useState<PromoOffer[]>(getStoredOffers);
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerSubtitle, setOfferSubtitle] = useState('');
+  const [offerBadge, setOfferBadge] = useState('SPECIAL DEAL');
+  const [offerDiscountTag, setOfferDiscountTag] = useState('');
+
   useEffect(() => {
     setProducts(getStoredProducts());
+    const currentBiz = getStoredBusinessConfig();
+    setBizConfig(currentBiz);
+    setBizPhone(currentBiz.phone || '');
+    setBizWhatsapp(currentBiz.whatsappNumber || '');
+    setBizAddress(currentBiz.address || '');
+    setBizLandmark(currentBiz.landmark || '');
+    setBizTagline(currentBiz.tagline || '');
+    setBizSubtext(currentBiz.subtext || '');
+    setBizWeekdays(currentBiz.openingHours?.weekdays || '10:00 AM – 9:30 PM');
+    setBizWeekends(currentBiz.openingHours?.weekends || '10:00 AM – 10:00 PM');
+    setOffersList(getStoredOffers());
   }, []);
 
   // Normalize phone number (strip spaces, hyphens, leading +)
@@ -476,6 +521,70 @@ export const AdminPage: React.FC = () => {
       await pushCloudProducts(updated);
       resetForm();
     }
+  };
+
+  // Handle Save Business Config
+  const handleSaveBusiness = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: BusinessConfigData = {
+      ...bizConfig,
+      phone: bizPhone.trim() || bizConfig.phone,
+      whatsappNumber: bizWhatsapp.trim().replace(/\D/g, '') || bizConfig.whatsappNumber,
+      whatsappDisplay: bizWhatsapp.trim() || bizConfig.whatsappDisplay,
+      address: bizAddress.trim() || bizConfig.address,
+      landmark: bizLandmark.trim() || bizConfig.landmark,
+      tagline: bizTagline.trim() || bizConfig.tagline,
+      subtext: bizSubtext.trim() || bizConfig.subtext,
+      openingHours: {
+        ...bizConfig.openingHours,
+        weekdays: bizWeekdays.trim() || bizConfig.openingHours.weekdays,
+        weekends: bizWeekends.trim() || bizConfig.openingHours.weekends
+      }
+    };
+    saveBusinessConfig(updated);
+    setBizConfig(updated);
+    await pushCloudMasterData({ products, businessConfig: updated, offers: offersList });
+    setSuccessMsg('Business contact info & store details saved! Live website updated for all visitors worldwide.');
+    setTimeout(() => setSuccessMsg(''), 7000);
+  };
+
+  // Handle Save New Promo Offer
+  const handleAddOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offerTitle.trim()) return;
+    const newOffer: PromoOffer = {
+      id: 'offer-' + Date.now(),
+      title: offerTitle.trim(),
+      subtitle: offerSubtitle.trim(),
+      badge: offerBadge.trim() || 'LIMITED TIME OFFER',
+      active: true,
+      discountTag: offerDiscountTag.trim() || undefined
+    };
+    const updated = [newOffer, ...offersList];
+    saveOffers(updated);
+    setOffersList(updated);
+    await pushCloudMasterData({ products, businessConfig: bizConfig, offers: updated });
+    setOfferTitle('');
+    setOfferSubtitle('');
+    setOfferDiscountTag('');
+    setSuccessMsg('New promotional banner offer published to live store database!');
+    setTimeout(() => setSuccessMsg(''), 7000);
+  };
+
+  // Handle Toggle Offer Active State
+  const handleToggleOffer = async (id: string) => {
+    const updated = offersList.map(o => o.id === id ? { ...o, active: !o.active } : o);
+    saveOffers(updated);
+    setOffersList(updated);
+    await pushCloudMasterData({ products, businessConfig: bizConfig, offers: updated });
+  };
+
+  // Handle Delete Offer
+  const handleDeleteOffer = async (id: string) => {
+    const updated = offersList.filter(o => o.id !== id);
+    saveOffers(updated);
+    setOffersList(updated);
+    await pushCloudMasterData({ products, businessConfig: bizConfig, offers: updated });
   };
 
   // SECURE OWNER AUTHENTICATION SCREEN
@@ -923,7 +1032,7 @@ export const AdminPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
         
         {/* Success Banner */}
         {successMsg && (
@@ -933,10 +1042,278 @@ export const AdminPage: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* UPLOAD / EDIT FORM COLUMN */}
-          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit text-left">
+        {/* Master Admin Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl text-xs font-bold">
+          <button
+            onClick={() => setAdminTab('mobiles')}
+            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+              adminTab === 'mobiles' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>📱 Mobiles Catalog ({products.length})</span>
+          </button>
+
+          <button
+            onClick={() => setAdminTab('business')}
+            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+              adminTab === 'business' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>🏢 Store & Contact Info</span>
+          </button>
+
+          <button
+            onClick={() => setAdminTab('offers')}
+            className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${
+              adminTab === 'offers' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>🏷️ Banner Offers & Discounts ({offersList.filter(o => o.active).length})</span>
+          </button>
+        </div>
+
+        {/* TAB 2: STORE & BUSINESS INFORMATION MANAGER */}
+        {adminTab === 'business' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-left shadow-2xl max-w-3xl mx-auto">
+            <div className="border-b border-slate-800 pb-4">
+              <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
+                <Settings className="w-5 h-5 text-purple-400" />
+                <span>Store Contact Info & Business Details</span>
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">
+                Updates made here are saved to the persistent database and immediately update Navbar, Footer, and Contact buttons across the live site without redeploying.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveBusiness} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">WhatsApp Chat Number (Digits with country code)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 919787061617"
+                    value={bizWhatsapp}
+                    onChange={(e) => setBizWhatsapp(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-emerald-400 font-mono text-sm focus:outline-none focus:border-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Directly controls all WhatsApp order links</p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Store Phone Call Number</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. +91 96594 58606"
+                    value={bizPhone}
+                    onChange={(e) => setBizPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Physical Store Address</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ARONA Mobiles, Bank Road"
+                    value={bizAddress}
+                    onChange={(e) => setBizAddress(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Landmark</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Near by Urankapatti Tea Stall"
+                    value={bizLandmark}
+                    onChange={(e) => setBizLandmark(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Weekday Store Hours</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 10:00 AM – 9:30 PM"
+                    value={bizWeekdays}
+                    onChange={(e) => setBizWeekdays(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Weekend Store Hours</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 10:00 AM – 10:00 PM"
+                    value={bizWeekends}
+                    onChange={(e) => setBizWeekends(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Homepage Store Subtext</label>
+                <textarea
+                  rows={2}
+                  value={bizSubtext}
+                  onChange={(e) => setBizSubtext(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Save Store Contact Info to Database</span>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 3: BANNER OFFERS & DISCOUNTS MANAGER */}
+        {adminTab === 'offers' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit">
+              <div className="border-b border-slate-800 pb-4">
+                <h2 className="text-lg font-bold font-heading text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <span>Publish Promotional Banner Offer</span>
+                </h2>
+                <p className="text-slate-400 text-xs mt-1">
+                  Active banners appear instantly at the top of the live website homepage.
+                </p>
+              </div>
+
+              <form onSubmit={handleAddOffer} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Offer Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Festival Mobile Exchange Bonus"
+                    value={offerTitle}
+                    onChange={(e) => setOfferTitle(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Subtitle / Details</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Get up to ₹5,000 extra trade-in value on upgrading"
+                    value={offerSubtitle}
+                    onChange={(e) => setOfferSubtitle(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Badge Text</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. LIMITED TIME OFFER"
+                      value={offerBadge}
+                      onChange={(e) => setOfferBadge(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Discount Tag</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. EXTRA ₹5000 OFF"
+                      value={offerDiscountTag}
+                      onChange={(e) => setOfferDiscountTag(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-bold focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Publish Offer Banner Live</span>
+                </button>
+              </form>
+            </div>
+
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-heading font-bold text-white text-base">Active Live Offers</h3>
+                  <p className="text-slate-400 text-xs">{offersList.length} Promo Banners in Database</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {offersList.map(off => (
+                  <div key={off.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                    <div className="space-y-1 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-amber-400/20 text-amber-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-400/30">
+                          {off.badge}
+                        </span>
+                        <span className="font-bold text-white text-sm">{off.title}</span>
+                      </div>
+                      <p className="text-slate-400 text-xs">{off.subtitle}</p>
+                      {off.discountTag && (
+                        <span className="inline-block text-emerald-400 font-bold text-xs">{off.discountTag}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleOffer(off.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                          off.active 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white' 
+                            : 'bg-slate-800 border-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {off.active ? 'Active' : 'Disabled'}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteOffer(off.id)}
+                        className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 border border-slate-700 text-slate-400 hover:text-rose-400 transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 1: MOBILES CATALOG MANAGER */}
+        {adminTab === 'mobiles' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* UPLOAD / EDIT FORM COLUMN */}
+            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl h-fit text-left">
             
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2 text-blue-400 font-heading font-bold text-lg">
@@ -1281,6 +1658,7 @@ export const AdminPage: React.FC = () => {
           </div>
 
         </div>
+        )}
 
       </main>
     </div>

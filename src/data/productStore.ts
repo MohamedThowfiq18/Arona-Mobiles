@@ -1,47 +1,23 @@
 import { Product } from '../types';
 import { SAMPLE_PRODUCTS } from './products';
-import { fetchCloudProducts, pushCloudProducts } from './cloudStore';
-import { safeLocalStorage } from '../utils/safeStorage';
-
-const STORAGE_KEY = 'arona_mobiles_products_v1';
+import { 
+  getStoredProducts as getMasterProducts, 
+  saveProducts as saveMasterProducts,
+  syncMasterDataWithCloud 
+} from './masterStore';
 
 /**
- * Load products from localStorage or initialize with sample default catalog
+ * Load products from master store
  */
 export function getStoredProducts(): Product[] {
-  try {
-    const saved = safeLocalStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (error) {
-    console.error('Failed to read products from storage:', error);
-  }
-  
-  // Fallback to sample products & save initial set
-  saveProducts(SAMPLE_PRODUCTS, false);
-  return SAMPLE_PRODUCTS;
+  return getMasterProducts();
 }
 
 /**
- * Save products array to localStorage, trigger local event, and push to cloud
+ * Save products to master store & trigger cloud sync
  */
 export function saveProducts(products: Product[], syncToCloud = true): void {
-  try {
-    safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('arona_products_updated'));
-    }
-    
-    if (syncToCloud) {
-      pushCloudProducts(products).catch(err => console.warn('Cloud sync error:', err));
-    }
-  } catch (error) {
-    console.error('Failed to save products:', error);
-  }
+  saveMasterProducts(products, syncToCloud);
 }
 
 /**
@@ -83,43 +59,9 @@ export function resetProductsToDefault(): Product[] {
 }
 
 /**
- * Synchronize local products with global cloud store so all devices worldwide show identical data
+ * Synchronize local products with master cloud store
  */
 export async function syncProductsWithCloud(): Promise<Product[]> {
-  try {
-    const cloudProducts = await fetchCloudProducts();
-    if (cloudProducts && cloudProducts.length > 0) {
-      const localRaw = safeLocalStorage.getItem(STORAGE_KEY);
-      const cloudRaw = JSON.stringify(cloudProducts);
-      
-      if (localRaw !== cloudRaw) {
-        safeLocalStorage.setItem(STORAGE_KEY, cloudRaw);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('arona_products_updated'));
-        }
-      }
-      return cloudProducts;
-    }
-  } catch (error) {
-    console.warn('Cloud store sync error:', error);
-  }
-  
-  // Return local stored products WITHOUT overwriting the cloud store if cloud fetch failed
+  await syncMasterDataWithCloud();
   return getStoredProducts();
-}
-
-// Auto-sync on window load and periodically
-if (typeof window !== 'undefined') {
-  // Sync on startup
-  setTimeout(() => syncProductsWithCloud(), 100);
-
-  // Sync on tab focus
-  window.addEventListener('focus', () => {
-    syncProductsWithCloud();
-  });
-
-  // Sync every 4 seconds so visitors see new/edited mobiles live
-  setInterval(() => {
-    syncProductsWithCloud();
-  }, 4000);
 }

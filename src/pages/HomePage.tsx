@@ -1,29 +1,64 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, ShieldCheck, RefreshCw, ArrowRight, Zap, Award, CreditCard, HeartHandshake, MapPin } from 'lucide-react';
+import { Sparkles, ShieldCheck, RefreshCw, ArrowRight, Zap, Award, CreditCard, HeartHandshake, MapPin, Tag, Gift } from 'lucide-react';
 import { getStoredProducts } from '../data/productStore';
+import { getStoredOffers } from '../data/masterStore';
 import { ProductCard } from '../components/ProductCard';
 import { CustomerReviewsSection } from '../components/CustomerReviewsSection';
-import { BUSINESS_CONFIG } from '../config/business';
-import { Product } from '../types';
+import { getBusinessConfig } from '../config/business';
+import { Product, PromoOffer } from '../types';
 
 export const HomePage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(getStoredProducts);
+  const [offers, setOffers] = useState<PromoOffer[]>(getStoredOffers);
+  const [biz, setBiz] = useState(getBusinessConfig);
 
   useEffect(() => {
     const handleUpdate = () => {
       setProducts(getStoredProducts());
+      setOffers(getStoredOffers());
+      setBiz(getBusinessConfig());
     };
+
     window.addEventListener('arona_products_updated', handleUpdate);
-    return () => window.removeEventListener('arona_products_updated', handleUpdate);
+    window.addEventListener('arona_business_updated', handleUpdate);
+    window.addEventListener('arona_offers_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+
+    return () => {
+      window.removeEventListener('arona_products_updated', handleUpdate);
+      window.removeEventListener('arona_business_updated', handleUpdate);
+      window.removeEventListener('arona_offers_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
   }, []);
 
-  const flashProducts = products.filter(p => p.flashDeal || p.offerPrice || p.featured);
+  const flashProducts = products.filter(p => p.flashDeal || p.offerPrice || p.featured || p.inStock);
+  const activeOffers = offers.filter(o => o.active);
   const featuredProduct = products[0];
 
   return (
-    <div className="pt-24 pb-16 space-y-20">
+    <div className="pt-20 pb-16 space-y-16">
       
+      {/* Live Store Announcement / Active Offer Banner */}
+      {activeOffers.length > 0 && (
+        <section className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white py-3 px-4 shadow-md">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm font-semibold">
+            <div className="flex items-center gap-2">
+              <span className="bg-white/20 px-2.5 py-0.5 rounded-full font-mono text-[11px] uppercase tracking-wider font-bold">
+                {activeOffers[0].badge}
+              </span>
+              <span>{activeOffers[0].title} — <span className="font-normal text-white/90">{activeOffers[0].subtitle}</span></span>
+            </div>
+            {activeOffers[0].discountTag && (
+              <span className="bg-amber-400 text-slate-950 font-black px-3 py-1 rounded-full text-xs animate-pulse">
+                {activeOffers[0].discountTag}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Hero Section - TetTrack Style 3D Mobile Showcase */}
       <section className="bg-slate-900 text-slate-100 border-b border-slate-800 py-16 lg:py-24 relative overflow-hidden">
         
@@ -46,7 +81,7 @@ export const HomePage: React.FC = () => {
               </h1>
 
               <p className="text-slate-300 text-lg sm:text-xl max-w-xl font-normal leading-relaxed">
-                Browse brand-new smartphones, certified pre-owned devices uploaded directly by our store owner, original accessories, and instant device trade-ins.
+                {biz.subtext}
               </p>
 
               <div className="pt-2 flex flex-wrap items-center gap-4">
@@ -60,33 +95,34 @@ export const HomePage: React.FC = () => {
 
                 <Link
                   to="/pre-owned"
-                  className="px-8 py-4 rounded-full bg-slate-800 border border-slate-700 text-purple-300 font-heading font-bold text-xs uppercase tracking-wider hover:bg-slate-700 transition-all flex items-center gap-2"
+                  className="px-8 py-4 rounded-full bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-heading font-bold text-xs uppercase tracking-wider hover:bg-slate-700 transition-all flex items-center gap-2"
                 >
-                  <ShieldCheck className="w-4 h-4 text-purple-400" />
-                  <span>PRE-OWNED MOBILES</span>
+                  <span>PRE-OWNED DEALS</span>
                 </Link>
               </div>
             </div>
 
-            {/* 3D Mobile Showcase Card */}
-            <div className="lg:col-span-5 perspective-container flex justify-center">
-              <div className="bg-slate-900 border border-slate-700 shadow-2xl rounded-3xl p-6 max-w-md w-full relative space-y-4 mobile-3d-card">
+            {/* Right Card Feature */}
+            <div className="lg:col-span-5 relative">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
                 <div className="flex items-center justify-between">
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold uppercase flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-emerald-400" /> 3D Device Showcase
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">Live Inventory</span>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-mono font-bold">
+                    <Zap className="w-3.5 h-3.5 text-purple-400" />
+                    <span>STORE HIGHLIGHT</span>
+                  </div>
+                  <span className="text-emerald-400 font-mono text-xs font-bold">IN STOCK LIVE</span>
                 </div>
 
-                <div className="aspect-[4/3] bg-slate-950 rounded-2xl overflow-hidden relative border border-slate-800 flex items-center justify-center p-4">
+                <div className="relative group overflow-hidden rounded-2xl bg-slate-900 border border-slate-800 p-4">
                   <img
-                    src={featuredProduct?.images[0] || 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80'}
-                    alt="Featured Mobile 3D"
-                    className="max-h-full max-w-full object-contain drop-shadow-[0_20px_30px_rgba(0,0,0,0.9)] transform hover:scale-110 transition-transform duration-500"
+                    src={featuredProduct?.images?.[0] || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80"}
+                    alt={featuredProduct?.name || "Featured Smartphone"}
+                    className="w-full h-56 object-cover rounded-xl group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent flex items-end p-4 text-white">
-                    <div>
-                      <h3 className="font-heading font-bold text-lg">{featuredProduct?.name || 'Featured Mobile'}</h3>
+                  <div className="mt-4 text-left space-y-1">
+                    <h3 className="font-heading font-bold text-white text-lg">{featuredProduct?.name || 'iPhone 16 Pro Max'}</h3>
+                    <div className="flex items-center justify-between">
+                      <p className="text-slate-400 text-xs">{featuredProduct?.brand} • {featuredProduct?.storage}</p>
                       <p className="text-emerald-400 font-bold text-sm">
                         ₹{featuredProduct?.sellingPrice.toLocaleString('en-IN') || '129,900'} 
                         {featuredProduct?.mrp && (
@@ -100,7 +136,7 @@ export const HomePage: React.FC = () => {
                 <div className="space-y-2 text-xs text-slate-300 text-left pt-1">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <span>{BUSINESS_CONFIG.address} ({BUSINESS_CONFIG.landmark})</span>
+                    <span>{biz.address} {biz.landmark ? `(${biz.landmark})` : ''}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <HeartHandshake className="w-4 h-4 text-purple-400 flex-shrink-0" />
@@ -149,7 +185,7 @@ export const HomePage: React.FC = () => {
       {/* Promises Bar */}
       <section className="bg-slate-100 py-12 border-y border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-          {BUSINESS_CONFIG.promises.map((p, idx) => (
+          {biz.promises.map((p, idx) => (
             <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-2 shadow-sm">
               <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold">
                 {idx === 0 && <Award className="w-5 h-5" />}

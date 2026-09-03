@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Clock, Phone, Navigation, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
-import { BUSINESS_CONFIG, getWhatsAppUrl } from '../config/business';
+import { getBusinessConfig, getWhatsAppUrl } from '../config/business';
 
 export const StorePage: React.FC = () => {
+  const [biz, setBiz] = useState(getBusinessConfig);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    const handleUpdate = () => setBiz(getBusinessConfig());
+    window.addEventListener('arona_business_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_business_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +61,7 @@ export const StorePage: React.FC = () => {
                 <MapPin className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold text-slate-900">Address</div>
-                  <div className="text-xs text-slate-600">{BUSINESS_CONFIG.address} ({BUSINESS_CONFIG.landmark})</div>
+                  <div className="text-xs text-slate-600">{biz.address} {biz.landmark ? `(${biz.landmark})` : ''}</div>
                 </div>
               </div>
 
@@ -59,30 +70,30 @@ export const StorePage: React.FC = () => {
                 <div>
                   <div className="font-bold text-slate-900">Working Hours</div>
                   <div className="text-xs text-slate-600">
-                    Weekdays: {BUSINESS_CONFIG.openingHours.weekdays} <br />
-                    Weekends: {BUSINESS_CONFIG.openingHours.weekends}
+                    Weekdays: {biz.openingHours?.weekdays || '10:00 AM – 9:30 PM'} <br />
+                    Weekends: {biz.openingHours?.weekends || '10:00 AM – 10:00 PM'}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <Phone className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <Phone className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-slate-900">Phone & WhatsApp</div>
-                  <div className="text-xs text-slate-600">{BUSINESS_CONFIG.phone}</div>
+                  <div className="font-bold text-slate-900">Call Support</div>
+                  <div className="text-xs text-slate-600">{biz.phone}</div>
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 flex flex-wrap gap-3">
+            <div className="pt-4 flex flex-wrap items-center gap-3">
               <a
-                href={BUSINESS_CONFIG.googleMapsUrl}
+                href={biz.googleMapsUrl}
                 target="_blank"
-                rel="noopener noreferrer"
-                className="py-3 px-6 rounded-full bg-blue-600 text-white font-heading font-bold text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm"
+                rel="noreferrer"
+                className="px-6 py-3 rounded-xl bg-blue-600 text-white font-heading font-bold text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm"
               >
                 <Navigation className="w-4 h-4" />
-                <span>GET DIRECTIONS</span>
+                <span>GET DIRECTIONS ON MAPS</span>
               </a>
 
               <a

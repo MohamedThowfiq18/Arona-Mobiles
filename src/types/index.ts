@@ -109,3 +109,33 @@ export interface Testimonial {
   date: string;
   verifiedPurchase: boolean;
 }
+
+export interface BusinessConfigData {
+  name: string;
+  tagline: string;
+  subtext: string;
+  phone: string;
+  whatsappNumber: string;
+  whatsappDisplay: string;
+  email: string;
+  address: string;
+  landmark: string;
+  city: string;
+  openingHours: {
+    weekdays: string;
+    weekends: string;
+    openDays: string;
+  };
+  googleMapsUrl: string;
+  storeAnnouncement?: string;
+}
+
+export interface PromoOffer {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  active: boolean;
+  discountTag?: string;
+  code?: string;
+}

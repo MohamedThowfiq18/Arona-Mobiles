@@ -1,7 +1,6 @@
-/**
- * ARONA MOBILES — Central Business Configuration
- * Central source of truth for contact details, address, opening hours, and WhatsApp integration.
- */
+import { getStoredBusinessConfig } from '../data/masterStore';
+import { BusinessConfigData } from '../types';
+
 export interface SocialLinks {
   instagram: string;
   whatsapp: string;
@@ -9,7 +8,7 @@ export interface SocialLinks {
   youtube?: string;
 }
 
-export const BUSINESS_CONFIG = {
+export const DEFAULT_BUSINESS_CONFIG: BusinessConfigData & { promises: Array<{ title: string; desc: string }> } = {
   name: "ARONA MOBILES",
   tagline: "SMARTER. BOLDER. CONNECTED.",
   subtext: "Your trusted destination for brand-new smartphones, certified pre-owned devices, original accessories, trade-in upgrades, and mobile care services.",
@@ -30,11 +29,6 @@ export const BUSINESS_CONFIG = {
     openDays: "Open 7 Days a Week"
   },
   googleMapsUrl: "https://maps.app.goo.gl/1uEeFDuCz4ArsGx46",
-  
-  socials: {
-    instagram: "https://www.instagram.com/arona_mobiles_?igsi=MTllanE4emdvanNwdQ==",
-    whatsapp: "https://wa.me/919787061617"
-  } as SocialLinks,
 
   // Store Promises
   promises: [
@@ -46,9 +40,31 @@ export const BUSINESS_CONFIG = {
 };
 
 /**
- * Utility to generate WhatsApp click-to-chat links with pre-filled messages
+ * Dynamically retrieve current live business configuration from database
+ */
+export function getBusinessConfig() {
+  if (typeof window !== 'undefined') {
+    const stored = getStoredBusinessConfig();
+    return {
+      ...DEFAULT_BUSINESS_CONFIG,
+      ...stored,
+      socials: {
+        instagram: "https://www.instagram.com/arona_mobiles_?igsi=MTllanE4emdvanNwdQ==",
+        whatsapp: `https://wa.me/${stored.whatsappNumber || DEFAULT_BUSINESS_CONFIG.whatsappNumber}`
+      }
+    };
+  }
+  return DEFAULT_BUSINESS_CONFIG;
+}
+
+export const BUSINESS_CONFIG = DEFAULT_BUSINESS_CONFIG;
+
+/**
+ * Utility to generate WhatsApp click-to-chat links with pre-filled messages dynamically
  */
 export function getWhatsAppUrl(customMessage: string): string {
+  const current = getBusinessConfig();
+  const cleanNumber = (current.whatsappNumber || "919787061617").replace(/\D/g, '');
   const encoded = encodeURIComponent(customMessage);
-  return `https://wa.me/${BUSINESS_CONFIG.whatsappNumber}?text=${encoded}`;
+  return `https://wa.me/${cleanNumber}?text=${encoded}`;
 }

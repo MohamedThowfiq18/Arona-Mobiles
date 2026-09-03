@@ -1,9 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { getWhatsAppUrl } from '../config/business';
 
 export const WhatsAppFloatingButton: React.FC = () => {
-  const waUrl = getWhatsAppUrl("Hi ARONA MOBILES, I am browsing your website and would like to chat with a store representative.");
+  const [waUrl, setWaUrl] = useState(() => getWhatsAppUrl("Hi ARONA MOBILES, I am browsing your website and would like to chat with a store representative."));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setWaUrl(getWhatsAppUrl("Hi ARONA MOBILES, I am browsing your website and would like to chat with a store representative."));
+    };
+    window.addEventListener('arona_business_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_business_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
+  }, []);
 
   return (
     <a

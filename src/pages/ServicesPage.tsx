@@ -1,9 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Smartphone, BatteryCharging, Wrench, Clock, MessageSquare } from 'lucide-react';
-import { SAMPLE_SERVICES } from '../data/services';
+import { getStoredServices } from '../data/masterStore';
 import { getWhatsAppUrl } from '../config/business';
+import { ServiceItem } from '../types';
 
 export const ServicesPage: React.FC = () => {
+  const [services, setServices] = useState<ServiceItem[]>(getStoredServices);
+
+  useEffect(() => {
+    const handleUpdate = () => setServices(getStoredServices());
+    window.addEventListener('arona_services_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_services_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
+  }, []);
+
   return (
     <div className="pt-28 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       
@@ -21,7 +34,7 @@ export const ServicesPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-        {SAMPLE_SERVICES.map(srv => {
+        {services.map(srv => {
           const waUrl = getWhatsAppUrl(`Hi ARONA MOBILES, I need assistance with ${srv.title}. Please provide diagnostic appointment.`);
 
           return (
@@ -53,7 +66,7 @@ export const ServicesPage: React.FC = () => {
                 <a
                   href={waUrl}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   className="py-2.5 px-5 rounded-xl bg-purple-600 text-white font-heading font-bold text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-purple-700 transition-all shadow-sm"
                 >
                   <MessageSquare className="w-4 h-4" />
