@@ -14,7 +14,11 @@ export const PreOwnedPage: React.FC = () => {
       setProducts(getStoredProducts());
     };
     window.addEventListener('arona_products_updated', handleUpdate);
-    return () => window.removeEventListener('arona_products_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_products_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
   }, []);
 
   const usedProducts = useMemo(() => {

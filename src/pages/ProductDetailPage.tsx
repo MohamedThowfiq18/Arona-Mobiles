@@ -13,7 +13,11 @@ export const ProductDetailPage: React.FC = () => {
   useEffect(() => {
     const handleUpdate = () => setProducts(getStoredProducts());
     window.addEventListener('arona_products_updated', handleUpdate);
-    return () => window.removeEventListener('arona_products_updated', handleUpdate);
+    window.addEventListener('arona_master_data_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('arona_products_updated', handleUpdate);
+      window.removeEventListener('arona_master_data_updated', handleUpdate);
+    };
   }, []);
 
   const product = products.find(p => p.id === id) || products[0];

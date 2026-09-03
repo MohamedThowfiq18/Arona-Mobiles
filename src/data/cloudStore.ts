@@ -81,7 +81,7 @@ export function initRealtimeGlobalSync(onDataReceived?: (data: MasterDataPayload
     console.warn('Realtime initialization warning:', err);
   }
 
-  // Network Offline / Reconnect Handling
+  // Network Offline / Reconnect Handling & Periodic Sync Safety Net
   if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
       console.log('🌐 Network reconnected! Re-syncing live database state...');
@@ -98,6 +98,19 @@ export function initRealtimeGlobalSync(onDataReceived?: (data: MasterDataPayload
       console.warn('⚠️ Network offline connection paused');
       dispatchConnectionState(false);
     });
+
+    // Periodic silent sync safety net (every 10s)
+    setInterval(() => {
+      if (navigator.onLine) {
+        fetchCloudMasterData().then(data => {
+          if (data && JSON.stringify(data) !== JSON.stringify(activeMasterDataCache)) {
+            console.log('🔄 Periodic Cloud Sync Re-alignment');
+            activeMasterDataCache = data;
+            notifyLocalDataUpdated();
+          }
+        }).catch(e => console.warn('Periodic sync check:', e));
+      }
+    }, 10000);
   }
 }
 
