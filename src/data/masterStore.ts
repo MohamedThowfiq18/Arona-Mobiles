@@ -30,7 +30,7 @@ export const SAMPLE_OFFERS: PromoOffer[] = [
 const PRODUCTS_STORAGE_KEY = 'arona_master_products_v3';
 let isHydratedFromCloud = false;
 
-// Load initial products from persistent local storage or fall back to SAMPLE_PRODUCTS
+// Load initial products from persistent local storage
 function loadInitialProducts(): Product[] {
   try {
     const stored = safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY);
@@ -44,7 +44,7 @@ function loadInitialProducts(): Product[] {
   } catch (err) {
     console.warn('Error reading initial stored products:', err);
   }
-  return SAMPLE_PRODUCTS;
+  return [];
 }
 
 // In-memory master state mirror (hydrated from live Cloud DB)
@@ -114,12 +114,7 @@ function notifyUpdate(eventName: string) {
  * 1. Products Management (Single Source of Truth: Cloud DB + Local Persistent Mirror)
  */
 export function getStoredProducts(): Product[] {
-  if (isHydratedFromCloud || safeLocalStorage.getItem(PRODUCTS_STORAGE_KEY) !== null) {
-    return masterMemoryCache.products || [];
-  }
-  return masterMemoryCache.products && masterMemoryCache.products.length > 0
-    ? masterMemoryCache.products
-    : SAMPLE_PRODUCTS;
+  return masterMemoryCache.products || [];
 }
 
 export function saveProducts(products: Product[], syncToCloud = true): void {

@@ -81,11 +81,18 @@ export const PreOwnedPage: React.FC = () => {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {usedProducts.map(product => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </div>
+      {usedProducts.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {usedProducts.map(product => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-12 text-center space-y-2">
+          <p className="font-heading font-bold text-slate-700">No pre-owned mobiles listed yet</p>
+          <p className="text-slate-500 text-xs">Certified used devices are listed directly by the store owner.</p>
+        </div>
+      )}
 
     </div>
   );

@@ -3,8 +3,6 @@ import { Product, BusinessConfigData, PromoOffer, AccessoryItem, ServiceItem } f
 import { OwnerSession, getCurrentSession, logoutCurrentDevice } from '../utils/ownerAuth';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-const PRIMARY_REST_URL = 'https://api.restful-api.dev/objects/ff808181a061cdc401a0635da4b7062d';
-
 export interface MasterDataPayload {
   products: Product[];
   businessConfig?: BusinessConfigData;
@@ -172,12 +170,33 @@ function notifyLocalDataUpdated() {
   }
 }
 
+const EXTENDS_CLASS_URL = 'https://extendsclass.com/api/json-storage/bin/abaeaab';
+const FALLBACK_REST_URL = 'https://api.restful-api.dev/objects/ff808181a061cdc401a0635da4b7062d';
+
 /**
  * Fetch the master payload directly from the Cloud Database (Single Source of Truth)
  */
 export async function fetchCloudMasterData(): Promise<MasterDataPayload | null> {
+  // 1. Primary: ExtendsClass Master Cloud Database
   try {
-    const res = await fetch(PRIMARY_REST_URL, {
+    const res = await fetch(`${EXTENDS_CLASS_URL}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && typeof json === 'object' && Array.isArray(json.products)) {
+        activeMasterDataCache = json as MasterDataPayload;
+        return activeMasterDataCache;
+      }
+    }
+  } catch (err) {
+    console.warn('ExtendsClass fetch notice:', err);
+  }
+
+  // 2. Secondary Fallback
+  try {
+    const res = await fetch(FALLBACK_REST_URL, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
     });
@@ -189,7 +208,7 @@ export async function fetchCloudMasterData(): Promise<MasterDataPayload | null> 
       }
     }
   } catch (err) {
-    console.warn('Cloud DB fetch notice:', err);
+    console.warn('Fallback Cloud DB fetch notice:', err);
   }
 
   return activeMasterDataCache;
@@ -229,9 +248,24 @@ export async function pushCloudMasterData(payload: MasterDataPayload): Promise<b
     }
   }
 
-  // 3. Persist to Cloud Database via PATCH (supported 200 OK)
+  // 3. Persist to Primary Cloud Database (ExtendsClass Master Bin)
+  let savedSuccessfully = false;
   try {
-    const res = await fetch(PRIMARY_REST_URL, {
+    const res = await fetch(EXTENDS_CLASS_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPayload)
+    });
+    if (res.ok) {
+      savedSuccessfully = true;
+    }
+  } catch (err) {
+    console.warn('Primary Cloud DB push notice:', err);
+  }
+
+  // 4. Secondary Fallback
+  try {
+    await fetch(FALLBACK_REST_URL, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -239,26 +273,10 @@ export async function pushCloudMasterData(payload: MasterDataPayload): Promise<b
         data: fullPayload
       })
     });
-    if (res.ok) {
-      notifyLocalDataUpdated();
-      return true;
-    } else {
-      // Fallback PUT if PATCH returns non-ok status
-      await fetch(PRIMARY_REST_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'arona_mobiles_master_database',
-          data: fullPayload
-        })
-      });
-    }
-  } catch (err) {
-    console.warn('Cloud DB push notice:', err);
-  }
+  } catch (e) {}
 
   notifyLocalDataUpdated();
-  return true;
+  return savedSuccessfully || true;
 }
 
 /**

@@ -34,6 +34,7 @@ export const HomePage: React.FC = () => {
   }, []);
 
   const flashProducts = (Array.isArray(products) ? products : []).filter(p => p && (p.flashDeal || p.offerPrice || p.featured || p.inStock));
+  const displayProducts = flashProducts.length > 0 ? flashProducts : (Array.isArray(products) ? products : []);
   const activeOffers = (Array.isArray(offers) ? offers : []).filter(o => o && o.active);
   const featuredProduct = Array.isArray(products) && products.length > 0 ? products[0] : null;
 
@@ -172,11 +173,20 @@ export const HomePage: React.FC = () => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {flashProducts.slice(0, 8).map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {displayProducts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {displayProducts.slice(0, 8).map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-12 text-center space-y-3">
+            <p className="font-heading font-bold text-slate-700 text-lg">Catalog Updating</p>
+            <p className="text-slate-500 text-sm max-w-md mx-auto">
+              Our mobile catalog is updated directly by the store owner. Check back shortly for newly uploaded devices!
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Customer Reviews Section */}

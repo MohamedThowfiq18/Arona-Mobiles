@@ -1,67 +1,55 @@
-import { supabase } from '../config/supabase';
-
 /**
- * Upload an image file to persistent cloud storage and return a permanent HTTPS public URL.
- * Never returns a temporary local blob or relative path.
+ * Compresses an image file to a lightweight, web-optimized Data URL (max 800px, 0.8 JPEG quality).
+ * This ensures the exact photo uploaded by the owner is permanently saved in the product record,
+ * requires zero external hosting APIs, never expires, and syncs instantly across all devices.
  */
 export async function uploadImageToCloudStorage(file: File): Promise<string> {
-  const fileName = `products/${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-
-  try {
-    // 1. Attempt Supabase Storage bucket upload
-    const { data, error } = await supabase.storage
-      .from('arona-product-images')
-      .upload(fileName, file, {
-        cacheControl: '3600000',
-        upsert: true,
-        contentType: file.type || 'image/jpeg'
-      });
-
-    if (!error && data?.path) {
-      const { data: publicUrlData } = supabase.storage
-        .from('arona-product-images')
-        .getPublicUrl(data.path);
-
-      if (publicUrlData?.publicUrl) {
-        return publicUrlData.publicUrl;
-      }
-    }
-  } catch (err) {
-    console.warn('Supabase storage upload fallback activated:', err);
-  }
-
-  // 2. Fallback to Cloud Storage REST Endpoint (ImgBB / Persistent Storage API)
-  try {
-    const formData = new FormData();
-    formData.append('image', file);
-    
-    // Free public persistent image cloud API fallback
-    const res = await fetch('https://api.imgbb.com/1/upload?key=5f4f89d380e227092c4314c44ad545a9', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json?.data?.url) {
-        return json.data.url;
-      }
-    }
-  } catch (err) {
-    console.warn('ImgBB fallback upload error:', err);
-  }
-
-  // 3. Fallback to persistent optimized Data URL for zero-dependency portability
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('Failed to convert image file to cloud URL'));
-      }
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDimension = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(readerEvent.target?.result as string);
+            return;
+          }
+
+          // Draw with high quality smoothing
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to web-optimized JPEG data URL (~30-60KB)
+          const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(optimizedDataUrl);
+        } catch (e) {
+          resolve(readerEvent.target?.result as string);
+        }
+      };
+      img.onerror = () => reject(new Error('Failed to load image for optimization'));
+      img.src = readerEvent.target?.result as string;
     };
-    reader.onerror = () => reject(new Error('File reading error'));
+    reader.onerror = () => reject(new Error('Failed to read image file'));
     reader.readAsDataURL(file);
   });
 }
