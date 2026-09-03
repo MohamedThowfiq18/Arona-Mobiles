@@ -244,17 +244,12 @@ export const AdminPage: React.FC = () => {
     setAuthMode('OTP');
   };
 
-  // Step 2: Verify OTP
+  // Step 2: Verify OTP -> Immediately Open Owner Portal
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
     if (otpInput.trim() === generatedOtp) {
       setAuthError('');
-      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
-      if (existingPassword) {
-        completeLogin();
-      } else {
-        setAuthMode('CREATE_PASSWORD');
-      }
+      completeLogin();
     } else {
       setAuthError('Invalid OTP code. Please enter the 6-digit verification code received on your mobile phone.');
     }
