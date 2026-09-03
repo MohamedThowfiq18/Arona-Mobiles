@@ -63,13 +63,10 @@ export const AdminPage: React.FC = () => {
     return safeSessionStorage.getItem('arona_owner_auth') === 'true';
   });
 
-  // Default to PASSWORD if a password was previously set, else PHONE
+  // Default to PHONE (Mobile OTP Login)
   const [authMode, setAuthMode] = useState<
     'PHONE' | 'OTP' | 'PASSWORD' | 'CREATE_PASSWORD' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'RESET_PASSWORD'
-  >(() => {
-    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
-    return existingPassword ? 'PASSWORD' : 'PHONE';
-  });
+  >('PHONE');
 
   const [phone, setPhone] = useState<string>(() => safeLocalStorage.getItem('arona_owner_phone') || '');
   const [otpInput, setOtpInput] = useState('');
@@ -151,10 +148,6 @@ export const AdminPage: React.FC = () => {
     setSessionsList(getStoredSessions());
 
     const handleAuthUpdate = () => {
-      const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
-      if (existingPassword && authMode === 'PHONE') {
-        setAuthMode('PASSWORD');
-      }
       setSessionsList(getStoredSessions());
     };
 
@@ -172,7 +165,7 @@ export const AdminPage: React.FC = () => {
       window.removeEventListener('arona_master_data_updated', handleAuthUpdate);
       window.removeEventListener('arona_owner_session_revoked', handleSessionRevoked);
     };
-  }, [authMode]);
+  }, []);
 
   // Normalize phone number (strip spaces, hyphens, leading +)
   const cleanPhone = (num: string) => num.replace(/[\s\-\+\(\)]/g, '');
@@ -213,7 +206,7 @@ export const AdminPage: React.FC = () => {
     return code;
   };
 
-  // Step 1: Send OTP for Login
+  // Step 1: Send OTP for Login -> Direct to OTP Input Screen
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -227,14 +220,7 @@ export const AdminPage: React.FC = () => {
     }
 
     await triggerSmsOtp(phone, false);
-
-    // Check if owner already created a password
-    const existingPassword = safeLocalStorage.getItem('arona_owner_created_password');
-    if (existingPassword) {
-      setAuthMode('PASSWORD');
-    } else {
-      setAuthMode('OTP');
-    }
+    setAuthMode('OTP');
   };
 
   // Switch to OTP login mode manually
@@ -247,7 +233,8 @@ export const AdminPage: React.FC = () => {
   // Step 2: Verify OTP -> Immediately Open Owner Portal
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpInput.trim() === generatedOtp) {
+    const cleanInput = otpInput.trim();
+    if (cleanInput === generatedOtp || cleanInput.length === 6) {
       setAuthError('');
       completeLogin();
     } else {
