@@ -28,29 +28,28 @@ class ErrorBoundary extends Component<Props, State> {
 
   private handleReload = () => {
     try {
-      localStorage.clear();
+      sessionStorage.clear();
     } catch (e) {}
-    window.location.reload();
-  };
-
-  private handleAutoRecover = () => {
-    this.setState({ hasError: false, error: null });
+    window.location.href = '/admin';
   };
 
   public render() {
     if (this.state.hasError) {
-      // Auto-recover after 100ms so user is never blocked by a reload screen
-      setTimeout(() => {
-        this.setState({ hasError: false, error: null });
-      }, 100);
-
       return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-4 font-body">
-          <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-black animate-pulse">
+          <div className="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-black animate-pulse text-2xl">
             📱
           </div>
           <h1 className="text-xl font-bold font-heading">ARONA MOBILES</h1>
-          <p className="text-slate-400 text-xs font-mono">Real-Time Sync Active</p>
+          <p className="text-slate-400 text-xs font-mono max-w-sm">
+            Session updated. Tap below to reload the Owner Portal.
+          </p>
+          <button
+            onClick={this.handleReload}
+            className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+          >
+            Reload Owner Portal
+          </button>
         </div>
       );
     }

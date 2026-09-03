@@ -1674,8 +1674,8 @@ return (
                 >
                   <div className="flex items-center gap-3">
                     <img
-                      src={prod.images[0]}
-                      alt={prod.name}
+                      src={prod.images?.[0] || 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?auto=format&fit=crop&w=800&q=80'}
+                      alt={prod.name || 'Product'}
                       className="w-14 h-14 object-cover rounded-xl bg-slate-950 border border-slate-800 flex-shrink-0"
                     />
 
@@ -1684,7 +1684,7 @@ return (
                         <span className="font-bold text-white text-sm">{prod.name}</span>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${prod.condition === 'new' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                           }`}>
-                          {prod.condition === 'new' ? 'New' : `Used (${prod.batteryHealth}% Batt)`}
+                          {prod.condition === 'new' ? 'New' : `Used (${prod.batteryHealth || 90}% Batt)`}
                         </span>
                       </div>
 
@@ -1693,7 +1693,7 @@ return (
                       </div>
 
                       <div className="font-bold text-emerald-400 text-xs">
-                        ₹{prod.sellingPrice.toLocaleString('en-IN')} <span className="text-slate-500 line-through text-[10px]">₹{prod.mrp.toLocaleString('en-IN')}</span>
+                        ₹{(prod.sellingPrice || 0).toLocaleString('en-IN')} <span className="text-slate-500 line-through text-[10px]">₹{(prod.mrp || 0).toLocaleString('en-IN')}</span>
                       </div>
                     </div>
                   </div>
@@ -1839,7 +1839,7 @@ return (
                         </span>
                       </div>
                       <p className="text-slate-400 text-[11px]">
-                        Authorized for +91 {session.phone.slice(-10)} • Login: {new Date(session.createdAt).toLocaleTimeString()}
+                        Authorized for +91 {(session?.phone || '9659458606').replace(/[\s\-\+\(\)]/g, '').slice(-10)} • Login: {new Date(session?.createdAt || Date.now()).toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
