@@ -1,147 +1,151 @@
-/**
- * ARONA MOBILES — TypeScript Type Definitions
- */
+export type ProductCondition = 'new' | 'preowned';
+export type ProductGrade = 'A+' | 'A' | 'B' | 'C';
 
-export type ProductCondition = 'new' | 'used';
-export type UsedGrade = 'A+' | 'A' | 'B';
-
-export interface ConditionReport {
-  display: string;      // e.g. "Flawless - Original OLED"
-  frame: string;        // e.g. "Minor hairline micro-scratch on bottom rail"
-  backGlass: string;    // e.g. "Pristine - No marks"
-  cameraLens: string;   // e.g. "Crystal clear"
-  batteryHealth: number;// e.g. 92%
-  speaker: string;      // e.g. "Tested & Loud"
-  chargingPort: string; // e.g. "Clean & Responsive"
-  repairHistory: string;// e.g. "100% Original Parts - Never Opened"
+export interface ProductVariant {
+  storage: string;
+  color: string;
+  colorHex?: string;
+  priceModifier?: number;
+  stock: number;
 }
 
-export interface SpecificationMap {
-  screen: string;
+export interface InspectionCheckitem {
+  name: string;
+  status: 'passed' | 'warning' | 'failed';
+  score: string;
+  details: string;
+}
+
+export interface InspectionReport {
+  batteryHealth: number;
+  screenGrade: string;
+  cosmeticScore: string;
+  checklist: InspectionCheckitem[];
+}
+
+export interface ProductSpecs {
+  display: string;
   processor: string;
   camera: string;
   battery: string;
   os: string;
-  network: string;
+  connectivity: string;
+  ram?: string;
 }
 
 export interface Product {
   id: string;
-  brand: 'Apple' | 'Samsung' | 'OnePlus' | 'Xiaomi' | 'Vivo' | 'OPPO' | 'Realme' | 'Motorola' | 'Google';
-  name: string;
-  category: 'mobile' | 'accessory';
-  condition: ProductCondition;
-  
-  // Pricing
-  mrp: number;
-  sellingPrice: number;
-  offerPrice?: number;
-  emiAvailable: boolean;
-  emiMonthlyStarting?: number;
-
-  // Key Attributes
-  storage?: string; // e.g. "256GB"
-  ram?: string;     // e.g. "8GB"
-  color: string;
-  colorHex?: string;
-  images: string[];
-  inStock: boolean;
-  featured?: boolean;
-  flashDeal?: boolean;
-
-  // Pre-Owned Specific Fields
-  grade?: UsedGrade;
-  batteryHealth?: number;
-  deviceAgeMonths?: number;
-  boxAvailable?: boolean;
-  billAvailable?: boolean;
-  accessoriesIncluded?: string[];
-  conditionReport?: ConditionReport;
-  
-  // Warranty & General
-  warrantyInfo: string; // e.g. "1 Year Official Apple Warranty" or "6 Months ARONA Care Certified Warranty"
-  specifications: SpecificationMap;
-  highlights: string[];
-}
-
-export interface AccessoryItem {
-  id: string;
-  name: string;
-  category: 'Cases' | 'Chargers' | 'Cables' | 'Earbuds' | 'Headphones' | 'Smartwatches' | 'Power Banks' | 'Screen Protection';
   brand: string;
+  model: string;
+  condition: ProductCondition;
+  gradeIfPreowned?: ProductGrade;
+  specs: ProductSpecs;
+  variants: ProductVariant[];
+  images: string[];
   price: number;
-  originalPrice: number;
+  originalPrice?: number;
+  stock: number;
+  inspectionReport?: InspectionReport;
+  rating: number;
+  reviewsCount: number;
+  badge?: string;
+}
+
+export interface CartItem {
+  product: Product;
+  selectedVariant: ProductVariant;
+  quantity: number;
+}
+
+export interface OrderItem {
+  productId: string;
+  title: string;
+  variant: string;
+  price: number;
+  quantity: number;
   image: string;
-  compatibility: string;
-  inStock: boolean;
-  rating: number;
 }
 
-export interface ServiceItem {
+export interface Order {
   id: string;
-  title: string;
-  description: string;
-  iconName: string;
-  startingPrice: string;
-  turnaroundTime: string;
-  warranty: string;
+  userId?: string;
+  items: OrderItem[];
+  status: 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  paymentStatus: 'pending' | 'paid' | 'failed';
+  shippingAddress: {
+    fullName: string;
+    email: string;
+    phone: string;
+    street: string;
+    city: string;
+    postalCode: string;
+  };
+  totals: {
+    subtotal: number;
+    shipping: number;
+    tax: number;
+    discount: number;
+    grandTotal: number;
+  };
+  createdAt: string;
 }
 
-export interface TradeInQuoteRequest {
-  currentBrand: string;
-  currentModel: string;
-  storage: string;
-  screenCondition: 'flawless' | 'good' | 'scratched' | 'cracked';
-  bodyCondition: 'flawless' | 'good' | 'dented';
-  functionalState: 'fully_working' | 'minor_issue' | 'faulty';
-  boxBillIncluded: boolean;
+export interface TradeInRequest {
+  id: string;
+  userId?: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  deviceInfo: {
+    brand: string;
+    model: string;
+    storage: string;
+  };
+  conditionAnswers: {
+    screenCondition: string;
+    bodyCondition: string;
+    batteryHealth: string;
+    functionalIssues: string[];
+  };
+  estimatedValue: number;
+  finalValue?: number;
+  status: 'pending' | 'scheduled' | 'inspected' | 'completed' | 'rejected';
+  scheduledSlot: {
+    date: string;
+    timeSlot: string;
+    type: 'pickup' | 'dropoff';
+    address?: string;
+  };
+  createdAt: string;
+}
+
+export interface RepairBooking {
+  id: string;
+  userId?: string;
+  ticketId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  serviceType: string;
+  deviceInfo: {
+    brand: string;
+    model: string;
+  };
+  scheduledSlot: {
+    date: string;
+    timeSlot: string;
+  };
+  status: 'received' | 'diagnosing' | 'repairing' | 'quality_check' | 'ready' | 'completed';
+  cost: number;
+  createdAt: string;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
   userName: string;
-  userPhone: string;
-}
-
-export interface Testimonial {
-  id: string;
-  name: string;
-  location: string;
-  devicePurchased: string;
-  comment: string;
   rating: number;
-  date: string;
+  comment: string;
   verifiedPurchase: boolean;
-}
-
-export interface BusinessConfigData {
-  name: string;
-  tagline: string;
-  subtext: string;
-  phone: string;
-  whatsappNumber: string;
-  whatsappDisplay: string;
-  email: string;
-  address: string;
-  landmark: string;
-  city: string;
-  openingHours: {
-    weekdays: string;
-    weekends: string;
-    openDays: string;
-  };
-  googleMapsUrl: string;
-  storeAnnouncement?: string;
-  socials?: {
-    instagram?: string;
-    facebook?: string;
-    youtube?: string;
-  };
-  promises?: Array<{ title: string; desc: string }>;
-}
-
-export interface PromoOffer {
-  id: string;
-  title: string;
-  subtitle: string;
-  badge: string;
-  active: boolean;
-  discountTag?: string;
-  code?: string;
+  createdAt: string;
 }

@@ -1,120 +1,195 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Smartphone, MessageSquare, Instagram, Facebook, Youtube, MapPin, Phone } from 'lucide-react';
-import { getBusinessConfig, getWhatsAppUrl } from '../config/business';
+'use client';
 
-export const Footer: React.FC = () => {
-  const [biz, setBiz] = useState(getBusinessConfig);
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { 
+  Smartphone, 
+  ShieldCheck, 
+  Truck, 
+  RotateCcw, 
+  Zap, 
+  MapPin, 
+  Phone, 
+  Mail, 
+  Clock, 
+  Send,
+  CreditCard,
+  CheckCircle2
+} from 'lucide-react';
+import { useProductStore } from '@/store/useProductStore';
 
-  useEffect(() => {
-    const handleUpdate = () => setBiz(getBusinessConfig());
-    window.addEventListener('arona_business_updated', handleUpdate);
-    window.addEventListener('arona_master_data_updated', handleUpdate);
-    return () => {
-      window.removeEventListener('arona_business_updated', handleUpdate);
-      window.removeEventListener('arona_master_data_updated', handleUpdate);
-    };
-  }, []);
+export function Footer() {
+  const [email, setEmail] = useState('');
+  const [subscribed, setSubscribed] = useState(false);
+  const addToast = useProductStore((state) => state.addToast);
 
-  const waUrl = getWhatsAppUrl("Hi ARONA MOBILES, I am contacting you from your website footer.");
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes('@')) return;
+
+    setSubscribed(true);
+    addToast({
+      type: 'success',
+      title: '🎉 Subscribed to VIP Phone Drops!',
+      description: `We sent a 10% trade-in voucher code to ${email}`
+    });
+    setEmail('');
+  };
 
   return (
-    <footer className="bg-slate-50 border-t border-slate-200 pt-16 pb-12 text-left">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <footer className="bg-slate-950 border-t border-slate-800 text-slate-400 font-sans pt-16 pb-12">
+      {/* Top Trust Banner */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6 rounded-2xl glass-panel border border-slate-800">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white">8-Point Inspection</h4>
+              <p className="text-xs text-slate-400">Certified by hardware engineers</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white">12-Month Warranty</h4>
+              <p className="text-xs text-slate-400">14-day hassle-free returns</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Truck className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white">Express Delivery</h4>
+              <p className="text-xs text-slate-400">Free shipping on orders over $299</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Zap className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white">Instant Trade-In Credit</h4>
+              <p className="text-xs text-slate-400">Upgrade on the spot today</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Footer Links */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 mb-12">
-          
-          {/* Brand Column */}
-          <div className="lg:col-span-4 space-y-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-600/20 flex-shrink-0">
-                <Smartphone className="w-6 h-6" />
-              </div>
-              <div className="font-heading font-black text-3xl sm:text-4xl tracking-tight text-slate-900 leading-none">
-                ARONA <span className="text-blue-600 font-extrabold">MOBILES</span>
+        {/* Brand Column */}
+        <div className="lg:col-span-2 space-y-4">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 p-0.5 shadow-glow">
+              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                <Smartphone className="w-5 h-5 text-cyan-400" />
               </div>
             </div>
-
-            <p className="text-slate-500 text-xs font-mono tracking-wider text-blue-600 font-bold uppercase">
-              {biz.tagline}
-            </p>
-
-            <p className="text-slate-600 text-xs leading-relaxed max-w-sm">
-              {biz.subtext}
-            </p>
-
-            <div className="pt-2 flex items-center gap-2">
-              {biz.socials?.instagram && (
-                <a href={biz.socials.instagram} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 transition-all">
-                  <Instagram className="w-4 h-4" />
-                </a>
-              )}
-              <a href={waUrl} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all">
-                <MessageSquare className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-
-          {/* Shop Column */}
-          <div className="lg:col-span-2 space-y-3">
-            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-900">SHOP</h4>
-            <ul className="space-y-2 text-xs text-slate-600">
-              <li><Link to="/new-mobiles" className="hover:text-blue-600 transition-colors">New Mobiles</Link></li>
-              <li><Link to="/pre-owned" className="hover:text-purple-600 transition-colors">Pre-Owned Mobiles</Link></li>
-              <li><Link to="/accessories" className="hover:text-slate-900 transition-colors">Accessories</Link></li>
-              <li><Link to="/exchange" className="hover:text-emerald-600 transition-colors">Exchange Offers</Link></li>
-              <li><Link to="/admin" className="hover:text-blue-600 transition-colors font-bold text-blue-700">🔐 Owner Portal</Link></li>
-            </ul>
-          </div>
-
-          {/* Services Column */}
-          <div className="lg:col-span-2 space-y-3">
-            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-900">SERVICES</h4>
-            <ul className="space-y-2 text-xs text-slate-600">
-              <li><Link to="/services" className="hover:text-purple-600 transition-colors">Mobile Repair</Link></li>
-              <li><Link to="/exchange" className="hover:text-emerald-600 transition-colors">Phone Exchange</Link></li>
-              <li><Link to="/services" className="hover:text-purple-600 transition-colors">Battery Replacement</Link></li>
-              <li><Link to="/services" className="hover:text-purple-600 transition-colors">Screen Protection</Link></li>
-            </ul>
-          </div>
-
-          {/* Location Column */}
-          <div className="lg:col-span-4 space-y-3">
-            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-900">FLAGSHIP STORE</h4>
-            <div className="text-xs text-slate-600 space-y-2">
-              <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                <span>{biz.address} {biz.landmark ? `(${biz.landmark})` : ''}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                <span>{biz.phone}</span>
-              </div>
-              <div className="pt-1 text-[11px] text-slate-500 font-mono">
-                Store Hours: {biz.openingHours?.weekdays || '10:00 AM – 9:30 PM'}
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-3">
-            <span>&copy; {new Date().getFullYear()} {biz.name}. All Rights Reserved.</span>
-            <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>LIVE REALTIME CLOUD SYNC</span>
+            <span className="text-xl font-bold font-display tracking-tight text-white">
+              ARONA <span className="text-blue-500">MOBILES</span>
             </span>
+          </Link>
+          <p className="text-xs leading-relaxed text-slate-400 max-w-sm">
+            Your premier destination for new flagship smartphones, certified pre-owned devices with 8-point hardware reports, mobile care repairs, and instant upgrade trade-ins.
+          </p>
+          <div className="pt-2 flex items-center gap-3 text-xs text-slate-400">
+            <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>104 Tech Boulevard, Metro Plaza, Suite 400</span>
           </div>
-          <div className="flex items-center gap-4 font-mono text-[11px]">
-            <span>100% Genuine Certified</span>
-            <span>•</span>
-            <span>Transparent Pre-Owned Inspection</span>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <Phone className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>+1 (800) 555-ARONA (2766)</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>Mon - Sat: 9:00 AM - 9:00 PM | Sun: 10 AM - 6 PM</span>
           </div>
         </div>
 
+        {/* Categories */}
+        <div>
+          <h4 className="text-xs font-semibold text-white uppercase tracking-wider font-mono mb-4">
+            Shop Catalog
+          </h4>
+          <ul className="space-y-2.5 text-xs">
+            <li><Link href="/shop?condition=new" className="hover:text-cyan-400 transition-colors">New Smartphones</Link></li>
+            <li><Link href="/pre-owned" className="hover:text-cyan-400 transition-colors">Certified Pre-Owned</Link></li>
+            <li><Link href="/shop?brand=Apple" className="hover:text-cyan-400 transition-colors">Apple iPhones</Link></li>
+            <li><Link href="/shop?brand=Samsung" className="hover:text-cyan-400 transition-colors">Samsung Galaxy Series</Link></li>
+            <li><Link href="/shop?brand=Google" className="hover:text-cyan-400 transition-colors">Google Pixel Devices</Link></li>
+            <li><Link href="/shop?category=accessories" className="hover:text-cyan-400 transition-colors">Chargers & Accessories</Link></li>
+          </ul>
+        </div>
+
+        {/* Services & Support */}
+        <div>
+          <h4 className="text-xs font-semibold text-white uppercase tracking-wider font-mono mb-4">
+            Services & Support
+          </h4>
+          <ul className="space-y-2.5 text-xs">
+            <li><Link href="/trade-in" className="hover:text-emerald-400 transition-colors">Instant Trade-In Valuation</Link></li>
+            <li><Link href="/repair" className="hover:text-cyan-400 transition-colors">Book a Mobile Repair</Link></li>
+            <li><Link href="/repair?tab=track" className="hover:text-cyan-400 transition-colors">Track Repair Status</Link></li>
+            <li><Link href="/pre-owned#inspection" className="hover:text-cyan-400 transition-colors">8-Point Inspection Standards</Link></li>
+            <li><Link href="/account" className="hover:text-cyan-400 transition-colors">Order Tracking</Link></li>
+            <li><Link href="/contact" className="hover:text-cyan-400 transition-colors">Store Locator & Maps</Link></li>
+          </ul>
+        </div>
+
+        {/* Newsletter Signup */}
+        <div>
+          <h4 className="text-xs font-semibold text-white uppercase tracking-wider font-mono mb-4">
+            VIP Price Drop Alerts
+          </h4>
+          <p className="text-xs text-slate-400 mb-3">
+            Subscribe for instant notification on flash sales & rare certified pre-owned arrivals.
+          </p>
+          <form onSubmit={handleSubscribe} className="space-y-2">
+            <div className="relative">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email..."
+                required
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 pr-10"
+              />
+              <button
+                type="submit"
+                className="absolute right-1.5 top-1.5 p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {subscribed && (
+              <div className="text-[11px] text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Voucher sent to your inbox!
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* Bottom Bar */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+        <p className="text-slate-500">
+          © 2026 ARONA MOBILES Retail Inc. All rights reserved. "Smarter. Bolder. Connected."
+        </p>
+        <div className="flex items-center space-x-4 text-slate-400">
+          <span className="flex items-center gap-1"><CreditCard className="w-4 h-4" /> Stripe / Razorpay Secured</span>
+          <span>•</span>
+          <Link href="/contact" className="hover:underline">Privacy Policy</Link>
+          <span>•</span>
+          <Link href="/contact" className="hover:underline">Terms of Service</Link>
+        </div>
       </div>
     </footer>
   );
-};
+}
