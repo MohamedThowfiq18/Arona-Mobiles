@@ -1,0 +1,40 @@
+.page { padding: var(--space-8) 0 var(--space-12); max-width: 680px; margin: 0 auto; }
+
+.hero { text-align: center; margin-bottom: var(--space-8); }
+.heroIcon { font-size: 48px; }
+.heroTitle { font-size: var(--text-3xl); font-weight: 800; margin: var(--space-3) 0 var(--space-2); }
+.heroDesc { color: var(--color-text-muted); font-size: var(--text-base); max-width: 480px; margin: 0 auto; }
+
+.steps { display: flex; gap: var(--space-2); margin-bottom: var(--space-6); justify-content: center; }
+
+.stepItem { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text-muted); padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); border: 1px solid var(--color-border); }
+
+.stepBall { width: 22px; height: 22px; border-radius: 50%; background: var(--color-border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+
+.active { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-light); }
+.active .stepBall { background: var(--color-accent); color: #FFFFFF; }
+.done { color: var(--color-success); border-color: var(--color-success); }
+.done .stepBall { background: var(--color-success); color: #FFFFFF; }
+
+.formCard { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); }
+
+.stepTitle { font-size: var(--text-xl); font-weight: 700; }
+
+.question { display: flex; flex-direction: column; gap: var(--space-2); }
+.questionLabel { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-secondary); }
+.optionGrid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.optionBtn { padding: 7px 14px; border: 1.5px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-text-secondary); background: var(--color-bg); cursor: pointer; transition: all var(--transition-fast); }
+.optionBtn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.optionBtnActive { border-color: var(--color-accent); background: var(--color-accent-light); color: var(--color-accent); font-weight: 600; }
+
+.backNext { display: flex; justify-content: space-between; align-items: center; }
+
+.estimateBox { text-align: center; padding: var(--space-8); background: var(--color-success-bg); border: 2px solid #BBF7D0; border-radius: var(--radius-md); }
+.estimateLabel { font-size: var(--text-sm); font-weight: 600; color: var(--color-success); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--space-2); }
+.estimateValue { font-size: 3.5rem; font-weight: 900; color: var(--color-text); }
+.estimateNote { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); }
+
+.trustPoints { display: flex; gap: var(--space-5); justify-content: center; font-size: var(--text-sm); color: var(--color-text-secondary); }
+
+.successPage { text-align: center; padding: var(--space-16) 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
+.successIcon { font-size: 64px; }

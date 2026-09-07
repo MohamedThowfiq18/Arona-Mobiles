@@ -1,0 +1,121 @@
+.page { padding: var(--space-6) 0 var(--space-10); }
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.title { font-size: var(--text-2xl); font-weight: 700; }
+
+.meta { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 4px; }
+
+.headerRight { display: flex; align-items: center; gap: var(--space-3); }
+
+/* ── Layout ── */
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: var(--space-5); align-items: start; }
+
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+/* ── Card ── */
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.cardTitle { font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-5); color: var(--color-text); }
+
+/* ── Progress bar ── */
+.progressBar { display: flex; align-items: flex-start; gap: 0; }
+
+.progressStep {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.progressStep::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  right: -50%;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.progressStep:last-child::before { display: none; }
+
+.progressStepDone::before { background: var(--color-success); }
+
+.progressDot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  z-index: 1;
+  position: relative;
+}
+
+.progressStepDone .progressDot { background: var(--color-success); border-color: var(--color-success); color: #FFFFFF; font-size: 12px; }
+.progressStepActive .progressDot { background: var(--color-accent); border-color: var(--color-accent); color: #FFFFFF; }
+
+.progressLabel { font-size: 10px; font-weight: 600; color: var(--color-text-muted); text-align: center; }
+.progressStepDone .progressLabel, .progressStepActive .progressLabel { color: var(--color-text); }
+
+/* ── Order Items ── */
+.orderItems { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.orderItem {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.orderItemImg {
+  width: 72px; height: 72px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; overflow: hidden;
+}
+
+.orderItemImg img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+
+.orderItemName { font-size: var(--text-sm); font-weight: 600; }
+.orderItemVariant { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+.orderItemQty { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+.orderItemPrice { font-size: var(--text-sm); font-weight: 700; }
+
+/* ── Address ── */
+.address { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.8; }
+
+/* ── Price ── */
+.priceRows { display: flex; flex-direction: column; gap: var(--space-3); }
+.priceRow { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-secondary); }
+.priceRowDiscount { color: var(--color-discount); font-weight: 600; }
+.priceRowTotal { font-size: var(--text-base); font-weight: 700; color: var(--color-text); }
+
+.paymentMethod { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); }
+.paid   { color: var(--color-success); font-weight: 600; }
+.pending{ color: var(--color-warning); font-weight: 600; }
+
+/* ── Return ── */
+.returnNote { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-3); }

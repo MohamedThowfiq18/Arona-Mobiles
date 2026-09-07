@@ -1,0 +1,89 @@
+[
+  {
+    "id": "p1788589656470-tnxwj",
+    "brand_id": "b1000000-0000-0000-0000-000000000001",
+    "category_id": "c1000000-0000-0000-0000-000000000001",
+    "brand": "Apple",
+    "model": "17pm",
+    "slug": "17pm",
+    "condition": "new",
+    "grade": null,
+    "short_description": "Apple 17pm",
+    "description": null,
+    "specs": {
+      "display": "",
+      "processor": "",
+      "ram": "",
+      "storage_built": "",
+      "battery": "",
+      "charging": "",
+      "camera": "",
+      "os": "",
+      "5g": true
+    },
+    "variants": [],
+    "images": [
+      "/uploads/products/phone-1788589647305-8rw5wo.png"
+    ],
+    "image_url": "/uploads/products/phone-1788589647305-8rw5wo.png",
+    "price": 12345,
+    "discount_price": 12567,
+    "stock": 1,
+    "sku": "APPL-6470",
+    "is_featured": true,
+    "is_active": true,
+    "flash_sale_ends_at": null,
+    "tags": [
+      "smartphone",
+      "apple"
+    ],
+    "average_rating": 5,
+    "review_count": 1,
+    "sold_count": 0,
+    "created_at": "2026-09-05T06:27:36.470Z",
+    "updated_at": "2026-09-05T06:27:36.470Z"
+  },
+  {
+    "id": "p1788588582848-as56i",
+    "brand_id": "b1000000-0000-0000-0000-000000000001",
+    "category_id": "c1000000-0000-0000-0000-000000000001",
+    "brand": "Samsung",
+    "model": "iuy",
+    "slug": "iuy",
+    "condition": "new",
+    "grade": null,
+    "short_description": "Samsung iuy",
+    "description": null,
+    "specs": {
+      "display": "",
+      "processor": "",
+      "ram": "",
+      "storage_built": "",
+      "battery": "",
+      "charging": "",
+      "camera": "",
+      "os": "",
+      "5g": false
+    },
+    "variants": [],
+    "images": [
+      "/uploads/products/phone-1788588576594-uynlop.png"
+    ],
+    "price": 12345,
+    "discount_price": 34556,
+    "stock": 1,
+    "sku": "SAMS-2848",
+    "is_featured": true,
+    "is_active": true,
+    "flash_sale_ends_at": null,
+    "tags": [
+      "smartphone",
+      "samsung"
+    ],
+    "average_rating": 5,
+    "review_count": 1,
+    "sold_count": 0,
+    "created_at": "2026-09-05T06:09:42.848Z",
+    "updated_at": "2026-09-05T06:09:42.848Z"
+  }
+]

@@ -1,0 +1,26 @@
+.authPrompt { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-16) 0; text-align: center; }
+.authIcon { font-size: 64px; }
+.authButtons { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
+.authBenefits { display: flex; flex-wrap: wrap; gap: var(--space-5); justify-content: center; font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-2); }
+
+.page { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-6); padding: var(--space-8) 0 var(--space-12); align-items: start; }
+@media (max-width: 768px) { .page { grid-template-columns: 1fr; } }
+
+.sidebar { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; position: sticky; top: 120px; }
+
+.userCard { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-accent); color: #FFFFFF; }
+.avatar { font-size: 32px; }
+.userName { font-weight: 700; font-size: var(--text-sm); }
+.userEmail { font-size: var(--text-xs); opacity: 0.8; }
+
+.navItem { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: 12px var(--space-4); font-size: var(--text-sm); color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); transition: all var(--transition-fast); text-align: left; cursor: pointer; }
+.navItem:hover { background: var(--color-bg-section); color: var(--color-text); }
+.navItemActive { background: var(--color-accent-light); color: var(--color-accent); font-weight: 600; border-left: 3px solid var(--color-accent); }
+.logout { color: var(--color-danger); border-bottom: none; }
+.logout:hover { background: var(--color-danger-bg); }
+
+.content { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-6); min-height: 400px; }
+.tabTitle { font-size: var(--text-xl); font-weight: 700; margin-bottom: var(--space-5); }
+.emptyState { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-10) 0; text-align: center; font-size: var(--text-sm); color: var(--color-text-muted); }
+.emptyState span { font-size: 40px; }
+.emptyState a { color: var(--color-accent); font-weight: 600; }

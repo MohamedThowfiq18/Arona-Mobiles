@@ -1,0 +1,20 @@
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.title { font-size: 1.5rem; font-weight: 800; }
+
+.formCard { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-5); margin-bottom: var(--space-5); }
+.formTitle { font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-4); }
+.formGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-4); }
+.formActions { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4); }
+
+.tableWrap { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.table { font-size: var(--text-sm); }
+
+.couponCode { font-family: monospace; font-size: var(--text-base); font-weight: 700; background: var(--color-bg-section); padding: 3px 8px; border-radius: var(--radius-xs); letter-spacing: 0.05em; }
+.couponDesc { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 3px; }
+
+.expires { font-size: var(--text-xs); }
+.expired { color: var(--color-danger); font-weight: 600; }
+
+.statusToggle { padding: 4px 10px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid; transition: all var(--transition-fast); }
+.active { background: #D1FAE5; color: #15803D; border-color: #BBF7D0; }
+.inactive { background: #F3F4F6; color: #9CA3AF; border-color: #E5E7EB; }

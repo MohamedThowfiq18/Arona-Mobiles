@@ -1,0 +1,61 @@
+.floatingBtn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #25D366;
+  color: #FFFFFF;
+  padding: 12px 18px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 16px rgba(37, 211, 102, 0.45);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  transition: all var(--transition-base);
+  animation: pulseGlow 3s infinite ease-in-out;
+}
+
+.floatingBtn:hover {
+  background: #1eb855;
+  color: #FFFFFF;
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.6);
+}
+
+.icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.label {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 4px 16px rgba(37, 211, 102, 0.45);
+  }
+  50% {
+    box-shadow: 0 4px 24px rgba(37, 211, 102, 0.7);
+  }
+  100% {
+    box-shadow: 0 4px 16px rgba(37, 211, 102, 0.45);
+  }
+}
+
+@media (max-width: 640px) {
+  .floatingBtn {
+    bottom: 18px;
+    right: 18px;
+    padding: 12px;
+    border-radius: 50%;
+  }
+
+  .label {
+    display: none;
+  }
+}

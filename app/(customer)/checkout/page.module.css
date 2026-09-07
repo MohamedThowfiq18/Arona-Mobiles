@@ -1,0 +1,140 @@
+.pageTitle {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  padding: var(--space-6) 0 var(--space-5);
+}
+
+/* Steps */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--space-8);
+  overflow-x: auto;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  flex: 1;
+  padding: var(--space-3) 0;
+  border-bottom: 2px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.stepActive {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  font-weight: 700;
+}
+
+.stepDone {
+  color: var(--color-success);
+  border-bottom-color: var(--color-success);
+}
+
+.stepNum {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.stepActive .stepNum { background: var(--color-accent); color: #FFFFFF; }
+.stepDone .stepNum   { background: var(--color-success); color: #FFFFFF; }
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-6);
+  align-items: start;
+  padding-bottom: var(--space-10);
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+/* Card */
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cardTitle { font-size: var(--text-lg); font-weight: 700; }
+
+.storePickupNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: #166534;
+}
+
+/* Payment methods */
+.paymentMethods { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.paymentMethod {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.paymentMethod:hover { border-color: var(--color-accent); }
+
+.paymentMethodActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+
+.paymentIcon { font-size: 20px; }
+.paymentLabel { flex: 1; font-size: var(--text-sm); font-weight: 500; }
+.paymentCheck { color: var(--color-success); font-weight: 700; }
+
+/* Review */
+.reviewSection { padding: var(--space-3); background: var(--color-bg-section); border-radius: var(--radius-sm); }
+.reviewLabel { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px; }
+.reviewValue { font-size: var(--text-sm); color: var(--color-text-secondary); }
+.reviewItems { display: flex; flex-direction: column; gap: var(--space-2); }
+.reviewItem { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-text-secondary); }
+
+.backNextRow { display: flex; justify-content: space-between; align-items: center; }
+
+/* Summary */
+.summary { position: sticky; top: 120px; display: flex; flex-direction: column; gap: var(--space-3); }
+
+.summaryCard { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-5); }
+
+.summaryTitle { font-size: var(--text-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: var(--space-4); }
+
+.summaryRows { display: flex; flex-direction: column; gap: var(--space-3); }
+.summaryRow { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-secondary); }
+.summaryTotal { font-size: var(--text-base); font-weight: 700; color: var(--color-text); }
+
+.trustBadges { background: var(--color-bg-section); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }

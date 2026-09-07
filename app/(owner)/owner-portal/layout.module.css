@@ -1,0 +1,2 @@
+.layout { display: flex; min-height: 100vh; background: var(--color-bg-section); }
+.main { flex: 1; padding: var(--space-6); overflow-x: hidden; }
