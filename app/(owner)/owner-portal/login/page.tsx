@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense, useCallback } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Script from 'next/script';
 import styles from './page.module.css';
 
 declare global {
   interface Window {
     initSendOTP?: (config: any) => void;
     sendOtp?: (identifier: string, success?: (data: any) => void, failure?: (error: any) => void) => void;
-    verifyOtp?: (otp: string, success?: (data: any) => void, failure?: (error: any) => void, reqId?: string) => void;
+    verifyOtp?: (otp: string | number, success?: (data: any) => void, failure?: (error: any) => void, reqId?: string) => void;
     retryOtp?: (retryType: string, success?: (data: any) => void, failure?: (error: any) => void, reqId?: string) => void;
   }
 }
@@ -19,7 +18,6 @@ const MSG91_WIDGET_TOKEN = process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN || '';
 
 /**
  * Robust helper to extract MSG91 Request ID from MSG91 SDK / API responses.
- * MSG91 typically returns { type: 'success', message: '36696971516579545978666c' } or { reqId: '...' }
  */
 function extractMsg91ReqId(data: any): string {
   if (!data) return '';
@@ -73,42 +71,107 @@ function OwnerLoginForm() {
   const [success, setSuccess] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  // MSG91 OTP State
+  // MSG91 State
+  const [msg91Ready, setMsg91Ready] = useState(false);
+  const [msg91ReqId, setMsg91ReqId] = useState<string | null>(null);
+
+  // OTP Input State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [msg91ReqId, setMsg91ReqId] = useState<string>('');
   const [cooldown, setCooldown] = useState(30);
   const [resending, setResending] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Initialize MSG91 Web SDK Widget
-  const initializeMsg91Widget = useCallback(() => {
+  // Stable MSG91 Custom Web SDK Script Loader & Initializer
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (typeof window.initSendOTP === 'function') {
-      try {
-        window.initSendOTP({
-          widgetId: MSG91_WIDGET_ID,
-          tokenAuth: MSG91_WIDGET_TOKEN,
-          exposeMethods: true,
-          success: (data: any) => {
-            console.info('[MSG91 OTP] Widget callback success:', data);
-          },
-          failure: (error: any) => {
-            console.error('[MSG91 OTP] Widget callback failure:', error);
-          },
-        });
-        console.info('[MSG91 OTP] MSG91 OTP Widget initialized with ID:', MSG91_WIDGET_ID);
-      } catch (err) {
-        console.error('[MSG91 OTP] Error initializing MSG91 widget:', err);
-      }
+    // If already initialized and methods are present
+    if (
+      typeof window.sendOtp === 'function' &&
+      typeof window.verifyOtp === 'function' &&
+      typeof window.retryOtp === 'function'
+    ) {
+      console.log('[MSG91] OTP Widget already initialized');
+      setMsg91Ready(true);
+      return;
     }
-  }, []);
 
-  // Attempt widget initialization on mount
-  useEffect(() => {
-    initializeMsg91Widget();
-  }, [initializeMsg91Widget]);
+    const initializeWidget = () => {
+      if (typeof window.initSendOTP !== 'function') {
+        console.error('[MSG91] initSendOTP is not available');
+        return;
+      }
+
+      const configuration = {
+        widgetId: MSG91_WIDGET_ID,
+        tokenAuth: MSG91_WIDGET_TOKEN,
+        exposeMethods: true,
+        success: (data: any) => {
+          console.log('[MSG91] Widget success callback', data);
+        },
+        failure: (err: any) => {
+          console.error('[MSG91] Widget failure callback', err);
+        },
+      };
+
+      try {
+        window.initSendOTP(configuration);
+
+        // Poll to verify methods are exposed onto window
+        let attempts = 0;
+        const checkReady = () => {
+          attempts += 1;
+          if (
+            typeof window.sendOtp === 'function' &&
+            typeof window.verifyOtp === 'function' &&
+            typeof window.retryOtp === 'function'
+          ) {
+            console.log('[MSG91] OTP Widget initialized successfully');
+            setMsg91Ready(true);
+          } else if (attempts < 15) {
+            setTimeout(checkReady, 200);
+          } else {
+            console.error('[MSG91] OTP methods not available after initialization');
+            setMsg91Ready(false);
+          }
+        };
+
+        setTimeout(checkReady, 200);
+      } catch (e) {
+        console.error('[MSG91] Error initializing MSG91 widget:', e);
+      }
+    };
+
+    const existingScript = document.querySelector(
+      'script[src="https://verify.msg91.com/otp-provider.js"]'
+    );
+
+    if (existingScript) {
+      if (typeof window.initSendOTP === 'function') {
+        initializeWidget();
+      } else {
+        existingScript.addEventListener('load', initializeWidget);
+      }
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://verify.msg91.com/otp-provider.js';
+    script.type = 'text/javascript';
+    script.async = true;
+    script.onload = initializeWidget;
+    script.onerror = () => {
+      console.error('[MSG91] Failed to load OTP provider script');
+      setMsg91Ready(false);
+    };
+
+    document.body.appendChild(script);
+
+    return () => {
+      // Keep script attached across screen transitions
+    };
+  }, []);
 
   // Resend countdown timer
   useEffect(() => {
@@ -162,98 +225,50 @@ function OwnerLoginForm() {
       // 2. Format mobile for MSG91: 91XXXXXXXXXX (without +)
       const normalizedMobile = `91${cleanPhone}`;
 
-      console.info('[MSG91 OTP] SEND START');
-      console.info(`[MSG91 OTP] Mobile: ${normalizedMobile}`);
-      console.info(`[MSG91 OTP] Widget ID configured: ${Boolean(MSG91_WIDGET_ID)}`);
-      console.info(`[MSG91 OTP] Widget token configured: ${Boolean(MSG91_WIDGET_TOKEN)}`);
+      console.log('[MSG91] SEND START');
+      console.log(`[MSG91] Mobile: ${normalizedMobile}`);
 
-      // 3. Ensure MSG91 Web SDK is ready or auto-fallback to server MSG91 dispatch
-      let sendOtpFunc = typeof window.sendOtp === 'function' ? window.sendOtp : null;
-
-      if (!sendOtpFunc) {
-        initializeMsg91Widget();
-        // Wait up to 1.5s for Web SDK to mount methods
-        const startWait = Date.now();
-        while (Date.now() - startWait < 1500) {
-          if (typeof window.sendOtp === 'function') {
-            sendOtpFunc = window.sendOtp;
-            break;
-          }
-          await new Promise(r => setTimeout(r, 100));
-        }
+      if (typeof window.sendOtp !== 'function') {
+        console.error('[MSG91] sendOtp is unavailable');
+        setError('OTP service is still loading. Please wait a moment and try again.');
+        setLoading(false);
+        return;
       }
 
-      if (sendOtpFunc) {
-        // Trigger MSG91 Custom Web SDK sendOtp
-        sendOtpFunc(
-          normalizedMobile,
-          (data: any) => {
-            console.info('[MSG91 OTP] SEND SUCCESS', data);
+      // 3. Trigger MSG91 Custom Web SDK sendOtp
+      window.sendOtp(
+        normalizedMobile,
+        (data: any) => {
+          console.log('[MSG91] SEND OTP SUCCESS', data);
 
-            const reqId = extractMsg91ReqId(data);
+          const reqId = extractMsg91ReqId(data);
 
-            if (!reqId) {
-              console.error('[MSG91 OTP] SUCCESS BUT reqId MISSING', data);
-              setError('MSG91 returned success but request ID was not found. Please try again.');
-              setLoading(false);
-              return;
-            }
-
-            console.info('[MSG91 OTP] REQID RECEIVED:', reqId);
-            setMsg91ReqId(reqId);
-            setStep('otp');
-            console.info('[MSG91 OTP] OTP SCREEN SHOWN');
-            setCooldown(30);
+          if (!reqId) {
+            console.error('[MSG91] reqId missing from response', data);
+            setError('MSG91 returned success but request ID was missing. Please try again.');
             setLoading(false);
-          },
-          (errorObj: any) => {
-            console.error('[MSG91 OTP] SEND FAILED', errorObj);
-            const errMsg =
-              (errorObj && typeof errorObj === 'object'
-                ? errorObj.message || errorObj.error || errorObj.msg
-                : String(errorObj)) || 'MSG91 OTP send failed. Check the browser console.';
-            setError(errMsg);
-            setLoading(false);
+            return;
           }
-        );
-      } else {
-        // Direct Server-Side MSG91 OTP dispatch fallback
-        console.info('[MSG91 OTP] Dispatching real SMS OTP via Server MSG91 API...');
-        const loginRes = await fetch('/api/auth/owner-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: cleanPhone, password }),
-        });
-        const loginData = await loginRes.json().catch(() => ({}));
 
-        if (!loginRes.ok || loginData.error) {
-          setError(loginData.error || 'Unable to send OTP SMS. Please try again.');
-          setLoading(false);
-          return;
-        }
-
-        if (loginData.requiresOtp) {
-          const reqId = loginData.reqId || '';
-          console.info('[MSG91 OTP] SEND SUCCESS (Server)', reqId);
-          console.info('[MSG91 OTP] REQID RECEIVED:', reqId);
+          console.log('[MSG91] REQID RECEIVED:', reqId);
           setMsg91ReqId(reqId);
           setStep('otp');
-          console.info('[MSG91 OTP] OTP SCREEN SHOWN');
+          console.log('[MSG91] OTP SCREEN SHOWN');
           setCooldown(30);
           setLoading(false);
-          return;
+        },
+        (errorObj: any) => {
+          console.error('[MSG91] SEND OTP FAILED', errorObj);
+          const errMsg =
+            (errorObj && typeof errorObj === 'object'
+              ? errorObj.message || errorObj.error || errorObj.msg
+              : String(errorObj)) || 'Failed to send OTP. Please check browser console.';
+          setError(errMsg);
+          setLoading(false);
         }
-
-        // Direct login if already verified
-        setSuccess(true);
-        setLoading(false);
-        setTimeout(() => {
-          router.push(redirectUrl);
-          router.refresh();
-        }, 700);
-      }
+      );
     } catch (err: any) {
-      console.error('[MSG91 OTP] SEND FAILED:', err);
+      console.error('[MSG91] SEND OTP FAILED', err);
       setError('Connection error. Please check your network and try again.');
       setLoading(false);
     }
@@ -294,6 +309,17 @@ function OwnerLoginForm() {
     const code = otp.join('');
     if (code.length < 4 || loading || success) return;
 
+    if (!msg91Ready) {
+      setError('OTP service is still loading. Please wait a moment and try again.');
+      return;
+    }
+
+    if (typeof window.verifyOtp !== 'function') {
+      console.error('[MSG91] verifyOtp is unavailable');
+      setError('OTP verification function not available. Please refresh.');
+      return;
+    }
+
     if (!msg91ReqId) {
       setError('OTP verification session expired. Please request a new OTP.');
       return;
@@ -305,23 +331,18 @@ function OwnerLoginForm() {
 
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
 
-    console.info('[MSG91 OTP] VERIFY START');
-
-    if (typeof window.verifyOtp !== 'function') {
-      console.error('[MSG91 OTP] VERIFY FAILED: window.verifyOtp is not available');
-      setError('MSG91 OTP Widget verification function not loaded. Please refresh.');
-      setLoading(false);
-      return;
-    }
+    console.log('[MSG91] VERIFY START');
+    console.log('reqId present:', Boolean(msg91ReqId));
+    console.log('verifyOtp available:', typeof window.verifyOtp === 'function');
 
     // Call MSG91 verifyOtp directly with msg91ReqId as the 4th argument
     window.verifyOtp(
-      code,
+      Number(code) || code,
       async (data: any) => {
-        console.info('[MSG91 OTP] VERIFY SUCCESS', data);
+        console.log('[MSG91] OTP VERIFY SUCCESS', data);
 
         const accessToken = extractMsg91AccessToken(data) || `verified_${Date.now()}`;
-        console.info('[MSG91 OTP] ACCESS TOKEN RECEIVED');
+        console.log('[MSG91] ACCESS TOKEN RECEIVED');
 
         try {
           const verifyRes = await fetch('/api/auth/msg91/verify', {
@@ -336,13 +357,13 @@ function OwnerLoginForm() {
           const verifyData = await verifyRes.json().catch(() => ({}));
 
           if (!verifyRes.ok || verifyData.error) {
-            console.error('[MSG91 OTP] ACCESS TOKEN VERIFICATION FAILED:', verifyData);
+            console.error('[MSG91] ACCESS TOKEN VERIFICATION FAILED:', verifyData);
             setError(verifyData.error || 'Server token verification failed. Please try again.');
             setLoading(false);
             return;
           }
 
-          console.info('[MSG91 OTP] SERVER TOKEN VERIFICATION SUCCESS');
+          console.log('[MSG91] SERVER TOKEN VERIFICATION SUCCESS');
           setSuccess(true);
           setLoading(false);
 
@@ -351,17 +372,17 @@ function OwnerLoginForm() {
             router.refresh();
           }, 700);
         } catch (serverErr: any) {
-          console.error('[MSG91 OTP] ACCESS TOKEN VERIFICATION FAILED:', serverErr);
+          console.error('[MSG91] ACCESS TOKEN VERIFICATION FAILED:', serverErr);
           setError('Network error verifying token with server. Please try again.');
           setLoading(false);
         }
       },
       (errorObj: any) => {
-        console.error('[MSG91 OTP] VERIFY FAILED:', errorObj);
+        console.error('[MSG91] OTP VERIFY FAILED', errorObj);
         const errMsg =
           (errorObj && typeof errorObj === 'object'
             ? errorObj.message || errorObj.error || errorObj.msg
-            : String(errorObj)) || 'MSG91 OTP verification failed. Check the browser console.';
+            : String(errorObj)) || 'Invalid or expired OTP. Please try again.';
         setError(errMsg);
         setLoading(false);
       },
@@ -372,6 +393,11 @@ function OwnerLoginForm() {
   // Handle Resend OTP: window.retryOtp("11", success, failure, msg91ReqId)
   const handleResend = () => {
     if (cooldown > 0 || resending) return;
+    if (!msg91ReqId) {
+      setError('OTP session expired. Please return to sign in.');
+      return;
+    }
+
     setResending(true);
     setError('');
     setResendMsg('');
@@ -383,10 +409,10 @@ function OwnerLoginForm() {
       window.retryOtp(
         '11', // SMS retry channel
         (data: any) => {
-          console.info('[MSG91 OTP] RETRY SUCCESS', data);
+          console.log('[MSG91] RESEND SUCCESS', data);
           const newReqId = extractMsg91ReqId(data);
           if (newReqId) {
-            console.info('[MSG91 OTP] NEW REQID RECEIVED:', newReqId);
+            console.log('[MSG91] NEW REQID RECEIVED:', newReqId);
             setMsg91ReqId(newReqId);
           }
           setResendMsg(`New verification code sent via SMS to ${maskedPhone}.`);
@@ -396,7 +422,7 @@ function OwnerLoginForm() {
           setResending(false);
         },
         (errorObj: any) => {
-          console.error('[MSG91 OTP] RETRY FAILED', errorObj);
+          console.error('[MSG91] RESEND FAILED', errorObj);
           const errMsg =
             (errorObj && typeof errorObj === 'object'
               ? errorObj.message || errorObj.error || errorObj.msg
@@ -404,33 +430,10 @@ function OwnerLoginForm() {
           setError(errMsg);
           setResending(false);
         },
-        msg91ReqId || undefined
-      );
-    } else if (typeof window.sendOtp === 'function') {
-      // Fallback fresh sendOtp
-      window.sendOtp(
-        `91${cleanPhone}`,
-        (data: any) => {
-          console.info('[MSG91 OTP] SEND SUCCESS (Resend)', data);
-          const newReqId = extractMsg91ReqId(data);
-          if (newReqId) {
-            console.info('[MSG91 OTP] NEW REQID RECEIVED:', newReqId);
-            setMsg91ReqId(newReqId);
-          }
-          setResendMsg(`New verification code sent via SMS to ${maskedPhone}.`);
-          setCooldown(30);
-          setOtp(['', '', '', '', '', '']);
-          otpRefs.current[0]?.focus();
-          setResending(false);
-        },
-        (errorObj: any) => {
-          console.error('[MSG91 OTP] SEND FAILED (Resend)', errorObj);
-          setError('Failed to resend SMS. Please try again.');
-          setResending(false);
-        }
+        msg91ReqId
       );
     } else {
-      setError('SMS retry service not ready. Please return to sign in.');
+      setError('SMS retry service is still loading. Please wait a moment.');
       setResending(false);
     }
   };
@@ -439,211 +442,201 @@ function OwnerLoginForm() {
   const displayMaskedPhone = cleanPhone ? `+91 XXXXXXX${cleanPhone.slice(-4)}` : 'your registered phone';
 
   return (
-    <>
-      {/* Load Official MSG91 OTP Widget SDK */}
-      <Script
-        src="https://verify.msg91.com/otp-provider.js"
-        strategy="afterInteractive"
-        onLoad={initializeMsg91Widget}
-        onReady={initializeMsg91Widget}
-      />
-
-      <div className={styles.page}>
-        <div className={styles.card}>
-          {/* Logo */}
-          <div className={styles.logo}>
-            <span className={styles.logoIcon}>📱</span>
-            <div>
-              <div className={styles.logoName}>ARONA MOBILES</div>
-              <div className={styles.logoSub}>Owner Portal</div>
-            </div>
-          </div>
-
-          <h1 className={styles.title}>
-            {step === 'otp' && !success ? 'Two-Step Verification' : 'Sign In'}
-          </h1>
-          <p className={styles.subtitle}>
-            {step === 'otp' && !success
-              ? <>Enter the real 6-digit SMS verification code delivered to <strong>{displayMaskedPhone}</strong>.</>
-              : 'Enter your authorized credentials to access the store management dashboard.'}
-          </p>
-
-          {/* Inactivity Alert */}
-          {reason === 'idle' && !error && !success && step === 'credentials' && (
-            <div className="alert alert--warning" role="alert" style={{ marginBottom: '16px' }}>
-              🔒 You have been signed out due to 30 minutes of inactivity. Please sign in again.
-            </div>
-          )}
-
-          {/* Success Confirmation */}
-          {success && (
-            <div className={styles.successBox} role="status" aria-live="polite">
-              <div className={styles.successIcon}>✓</div>
-              <div>
-                <div className={styles.successTitle}>Login Successful!</div>
-                <div className={styles.successDesc}>
-                  Welcome back to ARONA MOBILES Owner Portal.
-                </div>
-                <div className={styles.redirectNote}>
-                  <span className={styles.spinnerSmall} />
-                  Redirecting to dashboard...
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error Alert */}
-          {error && !success && (
-            <div className="alert alert--error" role="alert">{error}</div>
-          )}
-
-          {/* Resend Success Alert */}
-          {resendMsg && !success && (
-            <div className="alert alert--success" role="alert">{resendMsg}</div>
-          )}
-
-          {/* Step 1: Credentials Form */}
-          {step === 'credentials' && !success && (
-            <form onSubmit={handleCredentialsSubmit} className={styles.form}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="owner-phone">Authorized Mobile Number</label>
-                <input
-                  id="owner-phone"
-                  className="form-input"
-                  type="tel"
-                  placeholder="10-digit mobile number"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  required
-                  disabled={loading || success}
-                  autoComplete="tel"
-                  autoFocus
-                />
-              </div>
-
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" htmlFor="owner-password" style={{ marginBottom: 0 }}>Password</label>
-                  <a
-                    href="/owner-portal/forgot-password"
-                    style={{ fontSize: '0.8rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
-                  >
-                    Forgot Password?
-                  </a>
-                </div>
-                <div className={styles.passWrap} style={{ marginTop: '6px' }}>
-                  <input
-                    id="owner-password"
-                    className={`form-input ${styles.passInput}`}
-                    type={showPass ? 'text' : 'password'}
-                    placeholder="Enter password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    disabled={loading || success}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    className={styles.passToggle}
-                    onClick={() => setShowPass(s => !s)}
-                    aria-label={showPass ? 'Hide password' : 'Show password'}
-                    disabled={loading || success}
-                  >
-                    {showPass ? '🙈' : '👁️'}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                id="owner-login-btn"
-                type="submit"
-                className={`btn btn--full btn--lg ${success ? 'btn--success' : 'btn--primary'}`}
-                disabled={loading || success || phone.length < 10 || !password}
-                style={success ? { background: '#10B981', borderColor: '#10B981', color: '#fff' } : undefined}
-              >
-                {loading ? 'Verifying Credentials...' : 'Sign In →'}
-              </button>
-            </form>
-          )}
-
-          {/* Step 2: OTP Verification Form */}
-          {step === 'otp' && !success && (
-            <div className={styles.form}>
-              <div className={styles.otpRow} onPaste={handleOtpPaste}>
-                {otp.map((digit, i) => (
-                  <input
-                    key={i}
-                    id={`otp-digit-${i}`}
-                    ref={el => { otpRefs.current[i] = el; }}
-                    className={styles.otpBox}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={e => handleOtpChange(i, e.target.value)}
-                    onKeyDown={e => handleOtpKeyDown(i, e)}
-                    disabled={loading || success}
-                  />
-                ))}
-              </div>
-
-              <button
-                id="owner-verify-otp-btn"
-                type="button"
-                className="btn btn--primary btn--full btn--lg"
-                onClick={() => handleVerifyOtp()}
-                disabled={loading || success || otp.join('').length < 4}
-              >
-                {loading ? 'Verifying OTP...' : 'Verify & Sign In →'}
-              </button>
-
-              <div className={styles.resendRow}>
-                <span>Didn&apos;t receive code?</span>
-                <button
-                  type="button"
-                  className={styles.resendBtn}
-                  onClick={handleResend}
-                  disabled={resending || cooldown > 0}
-                >
-                  {resending
-                    ? 'Sending...'
-                    : cooldown > 0
-                    ? `Resend in ${cooldown}s`
-                    : 'Resend OTP'}
-                </button>
-              </div>
-
-              <div style={{ textAlign: 'center', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  className={styles.backLink}
-                  onClick={() => {
-                    setStep('credentials');
-                    setError('');
-                    setResendMsg('');
-                  }}
-                  disabled={loading || success}
-                >
-                  ← Change mobile number / password
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className={styles.securityNote}>
-            <span>🔒</span>
-            <span>Access is strictly restricted to pre-approved store owner phone numbers with end-to-end encryption.</span>
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '18px' }}>
-            <a href="/" style={{ fontSize: '0.85rem', color: 'var(--color-primary)', textDecoration: 'none' }}>
-              ← Return to Customer Store
-            </a>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        {/* Logo */}
+        <div className={styles.logo}>
+          <span className={styles.logoIcon}>📱</span>
+          <div>
+            <div className={styles.logoName}>ARONA MOBILES</div>
+            <div className={styles.logoSub}>Owner Portal</div>
           </div>
         </div>
+
+        <h1 className={styles.title}>
+          {step === 'otp' && !success ? 'Two-Step Verification' : 'Sign In'}
+        </h1>
+        <p className={styles.subtitle}>
+          {step === 'otp' && !success
+            ? <>Enter the real 6-digit SMS verification code delivered to <strong>{displayMaskedPhone}</strong>.</>
+            : 'Enter your authorized credentials to access the store management dashboard.'}
+        </p>
+
+        {/* Inactivity Alert */}
+        {reason === 'idle' && !error && !success && step === 'credentials' && (
+          <div className="alert alert--warning" role="alert" style={{ marginBottom: '16px' }}>
+            🔒 You have been signed out due to 30 minutes of inactivity. Please sign in again.
+          </div>
+        )}
+
+        {/* Success Confirmation */}
+        {success && (
+          <div className={styles.successBox} role="status" aria-live="polite">
+            <div className={styles.successIcon}>✓</div>
+            <div>
+              <div className={styles.successTitle}>Login Successful!</div>
+              <div className={styles.successDesc}>
+                Welcome back to ARONA MOBILES Owner Portal.
+              </div>
+              <div className={styles.redirectNote}>
+                <span className={styles.spinnerSmall} />
+                Redirecting to dashboard...
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && !success && (
+          <div className="alert alert--error" role="alert">{error}</div>
+        )}
+
+        {/* Resend Success Alert */}
+        {resendMsg && !success && (
+          <div className="alert alert--success" role="alert">{resendMsg}</div>
+        )}
+
+        {/* Step 1: Credentials Form */}
+        {step === 'credentials' && !success && (
+          <form onSubmit={handleCredentialsSubmit} className={styles.form}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="owner-phone">Authorized Mobile Number</label>
+              <input
+                id="owner-phone"
+                className="form-input"
+                type="tel"
+                placeholder="10-digit mobile number"
+                value={phone}
+                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                required
+                disabled={loading || success}
+                autoComplete="tel"
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label" htmlFor="owner-password" style={{ marginBottom: 0 }}>Password</label>
+                <a
+                  href="/owner-portal/forgot-password"
+                  style={{ fontSize: '0.8rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
+                >
+                  Forgot Password?
+                </a>
+              </div>
+              <div className={styles.passWrap} style={{ marginTop: '6px' }}>
+                <input
+                  id="owner-password"
+                  className={`form-input ${styles.passInput}`}
+                  type={showPass ? 'text' : 'password'}
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  disabled={loading || success}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className={styles.passToggle}
+                  onClick={() => setShowPass(s => !s)}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                  disabled={loading || success}
+                >
+                  {showPass ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            <button
+              id="owner-login-btn"
+              type="submit"
+              className={`btn btn--full btn--lg ${success ? 'btn--success' : 'btn--primary'}`}
+              disabled={loading || success || phone.length < 10 || !password}
+              style={success ? { background: '#10B981', borderColor: '#10B981', color: '#fff' } : undefined}
+            >
+              {loading ? 'Verifying Credentials...' : 'Sign In →'}
+            </button>
+          </form>
+        )}
+
+        {/* Step 2: OTP Verification Form */}
+        {step === 'otp' && !success && (
+          <div className={styles.form}>
+            <div className={styles.otpRow} onPaste={handleOtpPaste}>
+              {otp.map((digit, i) => (
+                <input
+                  key={i}
+                  id={`otp-digit-${i}`}
+                  ref={el => { otpRefs.current[i] = el; }}
+                  className={styles.otpBox}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handleOtpChange(i, e.target.value)}
+                  onKeyDown={e => handleOtpKeyDown(i, e)}
+                  disabled={loading || success}
+                />
+              ))}
+            </div>
+
+            <button
+              id="owner-verify-otp-btn"
+              type="button"
+              className="btn btn--primary btn--full btn--lg"
+              onClick={() => handleVerifyOtp()}
+              disabled={loading || success || otp.join('').length < 4}
+            >
+              {loading ? 'Verifying OTP...' : 'Verify & Sign In →'}
+            </button>
+
+            <div className={styles.resendRow}>
+              <span>Didn&apos;t receive code?</span>
+              <button
+                type="button"
+                className={styles.resendBtn}
+                onClick={handleResend}
+                disabled={resending || cooldown > 0}
+              >
+                {resending
+                  ? 'Sending...'
+                  : cooldown > 0
+                  ? `Resend in ${cooldown}s`
+                  : 'Resend OTP'}
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button
+                type="button"
+                className={styles.backLink}
+                onClick={() => {
+                  setStep('credentials');
+                  setError('');
+                  setResendMsg('');
+                }}
+                disabled={loading || success}
+              >
+                ← Change mobile number / password
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.securityNote}>
+          <span>🔒</span>
+          <span>Access is strictly restricted to pre-approved store owner phone numbers with end-to-end encryption.</span>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '18px' }}>
+          <a href="/" style={{ fontSize: '0.85rem', color: 'var(--color-primary)', textDecoration: 'none' }}>
+            ← Return to Customer Store
+          </a>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
