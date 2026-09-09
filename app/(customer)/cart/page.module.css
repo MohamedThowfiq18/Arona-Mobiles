@@ -144,6 +144,29 @@
   margin-top: var(--space-3);
 }
 
+@media (max-width: 600px) {
+  .cartItem {
+    grid-template-columns: 80px 1fr;
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .cartItemImg {
+    width: 80px;
+    height: 80px;
+  }
+
+  .cartItemTotal {
+    grid-column: 1 / -1;
+    text-align: right;
+    margin-top: -4px;
+  }
+
+  .couponRow {
+    flex-direction: column;
+  }
+}
+
 /* ── Empty ── */
 .empty {
   display: flex;

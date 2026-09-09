@@ -15,6 +15,8 @@ import {
 } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 const GENERIC_AUTH_ERROR = 'Invalid phone number or password.';
 
 export async function POST(request: NextRequest) {

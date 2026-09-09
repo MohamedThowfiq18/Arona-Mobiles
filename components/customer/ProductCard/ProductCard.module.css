@@ -241,7 +241,7 @@
 .contactRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 4px;
 }
 
 .callBtn {
@@ -253,11 +253,14 @@
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  padding: 6px 4px;
   font-size: 11px;
   font-weight: 600;
   text-decoration: none;
   transition: all var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .callBtn:hover {
@@ -275,15 +278,33 @@
   color: #16a34a;
   border: 1px solid rgba(37, 211, 102, 0.4);
   border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  padding: 6px 4px;
   font-size: 11px;
   font-weight: 600;
   text-decoration: none;
   transition: all var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .whatsappBtn:hover {
   background: #25D366;
   color: #FFFFFF;
   border-color: #25D366;
+}
+
+@media (max-width: 360px) {
+  .price {
+    font-size: 1rem;
+  }
+
+  .contactRow {
+    grid-template-columns: 1fr;
+  }
+
+  .addToCart {
+    padding: 7px 4px;
+    font-size: 11px;
+  }
 }

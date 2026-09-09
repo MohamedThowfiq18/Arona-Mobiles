@@ -6,6 +6,8 @@ import { createOwnerSession, setSessionCookie, invalidateOwnerSessions } from '@
 import { validatePhoneNumber, getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
   const { userAgent } = getDeviceFingerprint(request);

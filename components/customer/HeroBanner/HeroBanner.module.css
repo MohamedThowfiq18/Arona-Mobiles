@@ -148,18 +148,21 @@
 @media (max-width: 900px) {
   .inner {
     grid-template-columns: 1fr;
-    gap: var(--space-6);
-    padding-top: var(--space-6);
-    padding-bottom: var(--space-10);
+    gap: var(--space-5);
+    padding-top: var(--space-5);
+    padding-bottom: var(--space-8);
   }
 
   .title {
-    font-size: 1.85rem;
+    font-size: clamp(1.5rem, 6vw, 2.2rem);
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .visual {
     order: -1;
-    justify-content: flex-start;
+    justify-content: center;
+    width: 100%;
   }
 
   .imageFrame {
@@ -173,5 +176,41 @@
 
   .feature {
     font-size: 11px;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .banner {
+    min-height: auto;
+  }
+
+  .inner {
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-8);
+    gap: var(--space-4);
+  }
+
+  .title {
+    font-size: 1.45rem;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions :global(.btn) {
+    width: 100%;
+    font-size: var(--text-sm);
+    padding: 10px var(--space-4);
+  }
+
+  .dots {
+    bottom: var(--space-2);
   }
 }

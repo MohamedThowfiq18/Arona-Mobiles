@@ -11,6 +11,9 @@
   gap: 0;
   margin-bottom: var(--space-8);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .step {
@@ -24,6 +27,26 @@
   padding: var(--space-3) 0;
   border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .step {
+    padding: var(--space-2) var(--space-1);
+    font-size: var(--text-xs);
+  }
+
+  .card {
+    padding: var(--space-4);
+  }
+
+  .backNextRow {
+    flex-direction: column-reverse;
+    gap: var(--space-3);
+  }
+
+  .backNextRow :global(.btn) {
+    width: 100%;
+  }
 }
 
 .stepActive {

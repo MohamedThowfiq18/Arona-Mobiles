@@ -33,10 +33,19 @@
 .cardTitle { font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-5); color: var(--color-text); }
 
 /* ── Progress bar ── */
-.progressBar { display: flex; align-items: flex-start; gap: 0; }
+.progressBar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  padding-bottom: 4px;
+}
 
 .progressStep {
   flex: 1;
+  min-width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -86,6 +95,19 @@
   grid-template-columns: 72px 1fr auto;
   gap: var(--space-3);
   align-items: center;
+}
+
+@media (max-width: 480px) {
+  .orderItem {
+    grid-template-columns: 60px 1fr;
+  }
+  .orderItemPrice {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
+  .card {
+    padding: var(--space-4);
+  }
 }
 
 .orderItemImg {

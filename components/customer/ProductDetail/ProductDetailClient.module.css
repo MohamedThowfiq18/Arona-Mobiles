@@ -220,7 +220,16 @@
 .qtyLabel { font-size: var(--text-sm); color: var(--color-text-secondary); }
 
 /* CTA */
-.ctaButtons { display: flex; gap: var(--space-3); }
+.ctaButtons { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+
+@media (max-width: 480px) {
+  .ctaButtons {
+    flex-direction: column;
+  }
+  .ctaButtons :global(.btn) {
+    width: 100%;
+  }
+}
 
 /* Quick Contact */
 .quickContactSection {
@@ -245,6 +254,13 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .quickContactGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 .detailCallBtn {
@@ -365,13 +381,14 @@
 }
 
 /* ── Tabs ── */
-.tabs { margin-top: var(--space-8); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.tabs { margin-top: var(--space-8); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; width: 100%; max-width: 100%; }
 
 .tabBar {
   display: flex;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-section);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
@@ -395,17 +412,30 @@
   font-weight: 600;
 }
 
-.tabContent { padding: var(--space-6); }
+.tabContent {
+  padding: var(--space-6);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 480px) {
+  .tabBtn { padding: var(--space-3) var(--space-4); font-size: var(--text-xs); }
+  .tabContent { padding: var(--space-4); }
+}
 
 /* Specs */
 .specKey { font-weight: 500; color: var(--color-text-secondary); text-transform: capitalize; width: 180px; }
+
+@media (max-width: 640px) {
+  .specKey { width: 110px; font-size: var(--text-xs); word-break: break-word; }
+}
 
 /* Inspection */
 .inspectionReport { margin-top: var(--space-6); padding: var(--space-5); background: var(--color-success-bg); border: 1px solid #BBF7D0; border-radius: var(--radius-md); }
 
 .inspectionTitle { font-size: var(--text-base); font-weight: 700; color: var(--color-success); margin-bottom: var(--space-4); }
 
-.inspectionGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
+.inspectionGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); }
 
 .inspectionItem { display: flex; gap: var(--space-2); align-items: flex-start; }
 
@@ -426,24 +456,24 @@
 
 .reviewCard { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 
-.reviewHeader { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+.reviewHeader { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); flex-wrap: wrap; }
 
 .verifiedTag { font-size: var(--text-xs); color: var(--color-success); font-weight: 600; }
 
 .reviewTitle { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
 
-.reviewComment { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; }
+.reviewComment { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; word-break: break-word; }
 
-.reviewMeta { display: flex; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); }
+.reviewMeta { display: flex; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); flex-wrap: wrap; }
 
 /* Q&A */
 .qaList { display: flex; flex-direction: column; gap: var(--space-4); }
 
 .qaItem { padding: var(--space-4); background: var(--color-bg-section); border-radius: var(--radius-sm); }
 
-.qaQuestion { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-2); }
+.qaQuestion { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-2); word-break: break-word; }
 
-.qaAnswer { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; }
+.qaAnswer { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; word-break: break-word; }
 
 .qaAnswerLabel { font-weight: 700; color: var(--color-accent); }
 
@@ -455,5 +485,6 @@
 
 .similarGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
 
+@media (max-width: 360px)  { .similarGrid { grid-template-columns: 1fr; } }
 @media (min-width: 640px)  { .similarGrid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .similarGrid { grid-template-columns: repeat(5, 1fr); } }

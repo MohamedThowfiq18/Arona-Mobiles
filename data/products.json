@@ -1,5 +1,91 @@
 [
   {
+    "id": "p1788976557297-9de0i",
+    "brand_id": "b1000000-0000-0000-0000-000000000001",
+    "category_id": "c1000000-0000-0000-0000-000000000001",
+    "brand": "Samsung",
+    "model": "rtyu",
+    "slug": "rtyu",
+    "condition": "new",
+    "grade": null,
+    "short_description": "Samsung rtyu",
+    "description": "",
+    "specs": {
+      "display": "",
+      "processor": "",
+      "ram": "",
+      "storage_built": "",
+      "battery": "",
+      "charging": "",
+      "camera": "",
+      "os": "",
+      "5g": true
+    },
+    "variants": [],
+    "images": [
+      "/uploads/products/phone-1788976453528-alt58ni.png"
+    ],
+    "image_url": "/uploads/products/phone-1788976453528-alt58ni.png",
+    "price": 12344,
+    "stock": 1,
+    "sku": "SAMS-7297",
+    "is_featured": true,
+    "is_active": true,
+    "flash_sale_ends_at": null,
+    "tags": [
+      "smartphone",
+      "samsung"
+    ],
+    "average_rating": 5,
+    "review_count": 1,
+    "sold_count": 0,
+    "created_at": "2026-09-09T17:55:57.297Z",
+    "updated_at": "2026-09-09T17:55:57.297Z"
+  },
+  {
+    "id": "p1788976539800-fswjt",
+    "brand_id": "b1000000-0000-0000-0000-000000000001",
+    "category_id": "c1000000-0000-0000-0000-000000000001",
+    "brand": "Samsung",
+    "model": "rtyu",
+    "slug": "rtyu",
+    "condition": "new",
+    "grade": null,
+    "short_description": "Samsung rtyu",
+    "description": "",
+    "specs": {
+      "display": "",
+      "processor": "",
+      "ram": "",
+      "storage_built": "",
+      "battery": "",
+      "charging": "",
+      "camera": "",
+      "os": "",
+      "5g": false
+    },
+    "variants": [],
+    "images": [
+      "/uploads/products/phone-1788976453528-alt58ni.png"
+    ],
+    "image_url": "/uploads/products/phone-1788976453528-alt58ni.png",
+    "price": 12344,
+    "stock": 1,
+    "sku": "SAMS-9801",
+    "is_featured": true,
+    "is_active": true,
+    "flash_sale_ends_at": null,
+    "tags": [
+      "smartphone",
+      "samsung"
+    ],
+    "average_rating": 5,
+    "review_count": 1,
+    "sold_count": 0,
+    "created_at": "2026-09-09T17:55:39.800Z",
+    "updated_at": "2026-09-09T17:55:39.800Z"
+  },
+  {
     "id": "p1788589656470-tnxwj",
     "brand_id": "b1000000-0000-0000-0000-000000000001",
     "category_id": "c1000000-0000-0000-0000-000000000001",

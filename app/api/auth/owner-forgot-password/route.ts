@@ -5,6 +5,8 @@ import { STORE_CONFIG } from '@/lib/constants';
 import { validatePhoneNumber, getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 const GENERIC_RECOVERY_RESPONSE = {
   success: true,
   message: 'If this phone number is registered, a 6-digit recovery code has been sent via SMS.',

@@ -49,6 +49,20 @@
   gap: var(--space-2);
 }
 
+@media (max-width: 480px) {
+  .listHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .sortWrap {
+    width: 100%;
+  }
+  .sortSelect {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .sortLabel {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -67,6 +81,7 @@
   gap: var(--space-3);
 }
 
+@media (max-width: 360px)  { .grid { grid-template-columns: 1fr; } }
 @media (min-width: 640px)  { .grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1100px) { .grid { grid-template-columns: repeat(4, 1fr); } }
 

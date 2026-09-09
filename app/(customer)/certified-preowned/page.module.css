@@ -1,21 +1,25 @@
-.hero { background: #EFF6FF; border-bottom: 1px solid var(--color-border); padding: var(--space-10) 0; text-align: center; }
-.heroTitle { font-size: var(--text-4xl); font-weight: 800; margin-bottom: var(--space-3); }
-.heroDesc { font-size: var(--text-lg); color: var(--color-text-muted); margin-bottom: var(--space-5); }
+.hero { background: #EFF6FF; border-bottom: 1px solid var(--color-border); padding: var(--space-8) 0; text-align: center; width: 100%; max-width: 100%; }
+.heroTitle { font-size: clamp(1.6rem, 5vw, 2.25rem); font-weight: 800; margin-bottom: var(--space-3); overflow-wrap: break-word; }
+.heroDesc { font-size: clamp(0.9rem, 2.5vw, 1.125rem); color: var(--color-text-muted); margin-bottom: var(--space-5); }
 .badges { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: center; font-size: var(--text-sm); font-weight: 600; color: var(--color-text-secondary); }
 
 .gradeGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
 @media (max-width: 768px) { .gradeGrid { grid-template-columns: 1fr; } }
 .gradeCard { padding: var(--space-6); border: 1px solid; border-radius: var(--radius-md); }
+@media (max-width: 480px) { .gradeCard { padding: var(--space-4); } }
 .gradeLabel { font-size: var(--text-lg); font-weight: 800; margin-bottom: var(--space-2); }
 .gradeDesc { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; }
 
 .checkGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
 @media (max-width: 768px) { .checkGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 400px) { .checkGrid { grid-template-columns: 1fr; } }
 .checkItem { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 500; padding: var(--space-3) var(--space-4); background: var(--color-success-bg); border: 1px solid #BBF7D0; border-radius: var(--radius-sm); }
 .checkMark { font-size: 16px; }
 
 .productGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+@media (max-width: 360px)  { .productGrid { grid-template-columns: 1fr; } }
 @media (min-width: 640px)  { .productGrid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .productGrid { grid-template-columns: repeat(4, 1fr); } }
 
 .empty { text-align: center; padding: var(--space-16) 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
+

@@ -3,15 +3,15 @@
 .authButtons { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
 .authBenefits { display: flex; flex-wrap: wrap; gap: var(--space-5); justify-content: center; font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-2); }
 
-.page { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-6); padding: var(--space-8) 0 var(--space-12); align-items: start; }
-@media (max-width: 768px) { .page { grid-template-columns: 1fr; } }
+.page { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-6); padding: var(--space-8) 0 var(--space-12); align-items: start; width: 100%; max-width: 100%; }
+@media (max-width: 768px) { .page { grid-template-columns: 1fr; } .sidebar { position: relative; top: 0; } }
 
 .sidebar { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; position: sticky; top: 120px; }
 
 .userCard { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-accent); color: #FFFFFF; }
 .avatar { font-size: 32px; }
 .userName { font-weight: 700; font-size: var(--text-sm); }
-.userEmail { font-size: var(--text-xs); opacity: 0.8; }
+.userEmail { font-size: var(--text-xs); opacity: 0.8; word-break: break-all; }
 
 .navItem { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: 12px var(--space-4); font-size: var(--text-sm); color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); transition: all var(--transition-fast); text-align: left; cursor: pointer; }
 .navItem:hover { background: var(--color-bg-section); color: var(--color-text); }
@@ -19,7 +19,8 @@
 .logout { color: var(--color-danger); border-bottom: none; }
 .logout:hover { background: var(--color-danger-bg); }
 
-.content { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-6); min-height: 400px; }
+.content { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-6); min-height: 400px; overflow-x: auto; }
+@media (max-width: 480px) { .content { padding: var(--space-4); } }
 .tabTitle { font-size: var(--text-xl); font-weight: 700; margin-bottom: var(--space-5); }
 .emptyState { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-10) 0; text-align: center; font-size: var(--text-sm); color: var(--color-text-muted); }
 .emptyState span { font-size: 40px; }

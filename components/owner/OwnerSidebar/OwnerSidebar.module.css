@@ -102,3 +102,22 @@
   background: rgba(220,38,38,0.15);
   color: #FCA5A5;
 }
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    height: auto;
+    min-height: auto;
+    position: relative;
+    top: 0;
+  }
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .navItem {
+    padding: 8px 12px;
+    font-size: var(--text-xs);
+  }
+}

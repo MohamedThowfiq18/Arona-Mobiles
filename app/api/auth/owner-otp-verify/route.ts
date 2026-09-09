@@ -6,6 +6,8 @@ import { getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 import { STORE_CONFIG } from '@/lib/constants';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
   const { userAgent, deviceSummary } = getDeviceFingerprint(request);
