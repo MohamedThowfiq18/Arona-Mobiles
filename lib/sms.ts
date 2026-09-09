@@ -54,8 +54,8 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
   const cleanPhone = normalizeIndianMobile(phone);
   const masked = maskPhone(cleanPhone);
 
-  const authKey = process.env.MSG91_AUTH_KEY?.trim();
-  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
+  const authKey = process.env.MSG91_AUTH_KEY?.trim() || '569370AzlfijC4KZ2M6aa13d87P1';
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim() || '3669696a334b353931373936';
 
   // Validate server configuration — NO MOCK/FAKE OTP fallback
   if (!authKey || !widgetId || authKey.includes('your_msg91') || widgetId.includes('your_widget')) {
@@ -158,8 +158,8 @@ export async function retryMSG91OTP(phone: string, reqId?: string): Promise<SMSR
   const cleanPhone = normalizeIndianMobile(phone);
   const masked = maskPhone(cleanPhone);
 
-  const authKey = process.env.MSG91_AUTH_KEY?.trim();
-  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
+  const authKey = process.env.MSG91_AUTH_KEY?.trim() || '569370AzlfijC4KZ2M6aa13d87P1';
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim() || '3669696a334b353931373936';
 
   if (!authKey || !widgetId || authKey.includes('your_msg91')) {
     console.error('[MSG91 OTP] MSG91 server configuration missing for retry.');
@@ -169,6 +169,7 @@ export async function retryMSG91OTP(phone: string, reqId?: string): Promise<SMSR
       error: 'SMS OTP configuration is incomplete on server. Please check environment settings.',
     };
   }
+
 
   const formattedMobile = `91${cleanPhone}`;
 
@@ -234,8 +235,8 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
   const cleanOtp = String(enteredOTP || '').trim();
   const masked = maskPhone(cleanPhone);
 
-  const authKey = process.env.MSG91_AUTH_KEY?.trim();
-  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
+  const authKey = process.env.MSG91_AUTH_KEY?.trim() || '569370AzlfijC4KZ2M6aa13d87P1';
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim() || '3669696a334b353931373936';
 
   if (!authKey || authKey.includes('your_msg91')) {
     console.error('[MSG91 OTP] MSG91 server configuration missing for verification.');

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Access token is required for verification.' }, { status: 400 });
     }
 
-    const authKey = process.env.MSG91_AUTH_KEY?.trim();
+    const authKey = process.env.MSG91_AUTH_KEY?.trim() || '569370AzlfijC4KZ2M6aa13d87P1';
 
     if (!authKey) {
       console.error('[MSG91 OTP] Missing MSG91_AUTH_KEY on server');
