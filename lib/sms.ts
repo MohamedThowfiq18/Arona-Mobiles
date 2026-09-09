@@ -70,9 +70,9 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
   const formattedMobile = `91${cleanPhone}`;
   console.info(`[MSG91 OTP] Send request started for ${masked}`);
 
-  // 1. Try Widget Send OTP endpoint
+  // 1. Try Widget Send OTP endpoint on control.msg91.com
   try {
-    const widgetResponse = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', {
+    const widgetResponse = await fetch('https://control.msg91.com/api/v5/widget/sendOtp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -93,19 +93,27 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
       widgetData.type === 'success' &&
       !widgetData.hasError
     ) {
-      const reqId = widgetData.reqId || widgetData.data?.reqId || widgetData.messageId || `req_${Date.now()}`;
+      const reqId =
+        (typeof widgetData.message === 'string' && widgetData.message.length > 5 ? widgetData.message : null) ||
+        widgetData.reqId ||
+        widgetData.data?.reqId ||
+        widgetData.messageId ||
+        `req_${Date.now()}`;
+
       console.info(`📲 [MSG91] Real SMS OTP dispatched successfully to ${masked} (Req ID: ${reqId})`);
       return {
         success: true,
         reqId: String(reqId),
         provider: 'MSG91',
       };
+    } else {
+      console.warn(`[MSG91 OTP] control.msg91.com/api/v5/widget/sendOtp response:`, widgetData);
     }
-  } catch {
-    // Proceed to direct v5 OTP API fallback
+  } catch (err: any) {
+    console.warn(`[MSG91 OTP] Network error on widget/sendOtp:`, err?.message);
   }
 
-  // 2. Direct v5 OTP endpoint (DLT-Approved Template / OTP service)
+  // 2. Direct v5 OTP endpoint fallback
   try {
     const v5Url = `https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(widgetId)}&mobile=${encodeURIComponent(formattedMobile)}&authkey=${encodeURIComponent(authKey)}`;
     const v5Response = await fetch(v5Url, {
@@ -119,7 +127,7 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
     const v5Data = await v5Response.json().catch(() => ({}));
 
     if (v5Response.ok && (v5Data.type === 'success' || v5Data.request_id)) {
-      const reqId = v5Data.request_id || `req_${Date.now()}`;
+      const reqId = v5Data.request_id || (typeof v5Data.message === 'string' && v5Data.message.length > 5 ? v5Data.message : `req_${Date.now()}`);
       console.info(`📲 [MSG91] Real SMS OTP dispatched successfully to ${masked} (Req ID: ${reqId})`);
       return {
         success: true,
@@ -131,7 +139,7 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
       console.error(`[SMS Service] MSG91 send failed for ${masked}:`, errorMsg);
       return {
         success: false,
-        error: 'Unable to send OTP. Please try again.',
+        error: errorMsg || 'Unable to send OTP. Please try again.',
       };
     }
   } catch (error: any) {
@@ -271,14 +279,21 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
     const widgetData = await widgetResponse.json().catch(() => ({}));
 
     if (
-      widgetResponse.ok &&
-      widgetData.type === 'success' &&
+      (widgetResponse.ok || widgetData.status_code === 200) &&
+      (widgetData.type === 'success' || widgetData.status === 'success' || (typeof widgetData.message === 'string' && widgetData.type !== 'error' && widgetData.message.length > 10)) &&
       !widgetData.hasError
     ) {
+      const accessToken =
+        (typeof widgetData.message === 'string' && widgetData.message.length > 15 ? widgetData.message : null) ||
+        (typeof widgetData.data === 'string' ? widgetData.data : null) ||
+        widgetData.accessToken ||
+        widgetData.token ||
+        undefined;
+
       console.info(`✅ [MSG91] Widget SMS OTP verified successfully for ${masked}`);
       return {
         success: true,
-        accessToken: typeof widgetData.data === 'string' ? widgetData.data : undefined,
+        accessToken,
       };
     }
   } catch {
