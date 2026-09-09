@@ -205,6 +205,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // If client requested credential validation before calling MSG91 Web SDK sendOtp
+    if (body.checkOnly) {
+      console.info(`[MSG91 OTP] Owner credentials validated for ${cleanPhone}; ready for MSG91 Web SDK`);
+      return NextResponse.json({
+        valid: true,
+        ownerId: owner.id,
+        cleanPhone,
+        formattedMobile: `91${cleanPhone}`,
+      });
+    }
+
     // ── 5. First-time Login MFA Check: Require Real MSG91 SMS OTP ─────
     if (!owner.otp_verified) {
       const rateCheck = checkRateLimit(cleanPhone);

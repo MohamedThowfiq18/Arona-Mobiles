@@ -59,15 +59,16 @@ export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
 
   // Validate server configuration — NO MOCK/FAKE OTP fallback
   if (!authKey || !widgetId || authKey.includes('your_msg91') || widgetId.includes('your_widget')) {
-    console.error('[SMS Service] MSG91 configuration missing.');
+    console.error('[MSG91 OTP] MSG91 server configuration missing. authKey set:', Boolean(authKey), 'widgetId set:', Boolean(widgetId));
     return {
       success: false,
       configured: false,
-      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+      error: 'SMS OTP configuration is incomplete on server. Please check environment settings.',
     };
   }
 
   const formattedMobile = `91${cleanPhone}`;
+  console.info(`[MSG91 OTP] Send request started for ${masked}`);
 
   // 1. Try Widget Send OTP endpoint
   try {
@@ -153,11 +154,11 @@ export async function retryMSG91OTP(phone: string, reqId?: string): Promise<SMSR
   const widgetId = process.env.MSG91_WIDGET_ID?.trim();
 
   if (!authKey || !widgetId || authKey.includes('your_msg91')) {
-    console.error('[SMS Service] MSG91 configuration missing.');
+    console.error('[MSG91 OTP] MSG91 server configuration missing for retry.');
     return {
       success: false,
       configured: false,
-      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+      error: 'SMS OTP configuration is incomplete on server. Please check environment settings.',
     };
   }
 
@@ -229,11 +230,11 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
   const widgetId = process.env.MSG91_WIDGET_ID?.trim();
 
   if (!authKey || authKey.includes('your_msg91')) {
-    console.error('[SMS Service] MSG91 configuration missing.');
+    console.error('[MSG91 OTP] MSG91 server configuration missing for verification.');
     return {
       success: false,
       configured: false,
-      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+      error: 'SMS OTP configuration is incomplete on server. Please check environment settings.',
     };
   }
 

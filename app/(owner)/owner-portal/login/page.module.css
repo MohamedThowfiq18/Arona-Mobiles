@@ -159,6 +159,88 @@
   display: inline-block;
 }
 
+/* OTP Step Styles */
+.otpRow {
+  display: flex;
+  gap: var(--space-2, 8px);
+  justify-content: center;
+  margin: var(--space-4) 0;
+}
+
+.otpBox {
+  width: 44px;
+  height: 54px;
+  text-align: center;
+  font-size: var(--text-2xl, 24px);
+  font-weight: 700;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg);
+  color: var(--color-text-main, #111827);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.otpBox:focus {
+  border-color: var(--color-accent, #2563EB);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.otpBox:disabled {
+  background: var(--color-bg-section, #F9FAFB);
+  opacity: 0.7;
+}
+
+.resendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted);
+  margin-top: var(--space-3);
+  padding: 0 var(--space-1);
+}
+
+.resendBtn {
+  font-size: var(--text-xs, 12px);
+  color: var(--color-accent, #2563EB);
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.resendBtn:hover:not(:disabled) {
+  color: #1D4ED8;
+}
+
+.resendBtn:disabled {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin-top: var(--space-2);
+}
+
+.backLink:hover {
+  color: var(--color-accent, #2563EB);
+  text-decoration: underline;
+}
+
 @keyframes slideInDown {
   from {
     opacity: 0;
@@ -173,3 +255,4 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
