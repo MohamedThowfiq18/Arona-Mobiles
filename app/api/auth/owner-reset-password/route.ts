@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyOTP } from '@/lib/otp';
+import { verifyMSG91OTP } from '@/lib/sms';
 import bcrypt from 'bcryptjs';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { createOwnerSession, setSessionCookie, invalidateOwnerSessions } from '@/lib/auth';
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { phone, otp, newPassword } = body;
+    const { phone, otp, newPassword, reqId } = body;
 
     if (!phone || !otp || !newPassword) {
       return NextResponse.json({
@@ -33,23 +33,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 1. Verify OTP with strict security rules (5-min expiry, max 5 attempts, single-use)
-    const verification = verifyOTP(cleanPhone, cleanOtp);
+    // 1. Verify OTP using MSG91 official server-side verification API
+    const verification = await verifyMSG91OTP(cleanPhone, cleanOtp, reqId);
 
-    if (!verification.valid) {
+    if (!verification.success) {
       await logAuditEvent({
         ownerId: `owner-${cleanPhone}`,
         action: 'OTP_FAILED',
         ipAddress: ip,
         userAgent,
-        note: 'Password reset OTP verification failed',
+        note: 'Password reset MSG91 OTP verification failed',
       });
 
       return NextResponse.json({
-        error: verification.error || 'Invalid or expired verification code.',
-        attemptsRemaining: verification.attemptsRemaining,
-      }, { status: 401 });
+        error: verification.error || 'Invalid or expired OTP. Please try again.',
+      }, { status: verification.configured === false ? 503 : 400 });
     }
+
+    await logAuditEvent({
+      ownerId: `owner-${cleanPhone}`,
+      action: 'OTP_VERIFIED',
+      ipAddress: ip,
+      userAgent,
+      note: 'Password reset MSG91 OTP verified successfully',
+    });
 
     // 2. Hash new password (bcrypt min cost factor 10)
     const passwordHash = await bcrypt.hash(newPassword, 10);

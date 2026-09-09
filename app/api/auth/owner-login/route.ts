@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import bcrypt from 'bcryptjs';
-import { generateOTP, hashOTP, checkRateLimit, issueOTP } from '@/lib/otp';
-import { sendOTPSMS } from '@/lib/sms';
+import { checkRateLimit } from '@/lib/otp';
+import { sendMSG91OTP } from '@/lib/sms';
 import { createOwnerSession } from '@/lib/auth';
 import { STORE_CONFIG } from '@/lib/constants';
 import {
@@ -205,47 +205,52 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── 5. First-time Login MFA Check: Require 6-Digit SMS OTP ─────────
+    // ── 5. First-time Login MFA Check: Require Real MSG91 SMS OTP ─────
     if (!owner.otp_verified) {
       const rateCheck = checkRateLimit(cleanPhone);
       if (!rateCheck.allowed) {
+        await logAuditEvent({
+          ownerId: owner.id || `owner-${cleanPhone}`,
+          action: 'OTP_RATE_LIMITED',
+          ipAddress: ip,
+          userAgent,
+          note: `Too many OTP requests from phone ${cleanPhone}`,
+        });
         return NextResponse.json({
           error: `Too many OTP requests. Please wait ${rateCheck.remainingMinutes} minute(s) before requesting another code.`,
         }, { status: 429 });
       }
-
-      const otp = generateOTP();
-      const { expiresAt, codeHash } = issueOTP(cleanPhone, otp, owner.id, 'first_time_login');
-
-      if (isSupabaseConfigured()) {
-        try {
-          const supabase = getSupabaseAdminClient();
-          await supabase.from('otp_codes').insert({
-            owner_id: owner.id,
-            code_hash: codeHash,
-            expires_at: expiresAt.toISOString(),
-            used: false,
-          });
-        } catch {
-          // Continue
-        }
-      }
-
-      // Send real SMS OTP (Twilio/MSG91/Fast2SMS)
-      await sendOTPSMS(cleanPhone, otp);
 
       await logAuditEvent({
         ownerId: owner.id || `owner-${cleanPhone}`,
         action: 'OTP_REQUESTED',
         ipAddress: ip,
         userAgent,
-        note: 'First-time login OTP dispatched via SMS',
+        note: 'First-time login OTP requested via MSG91 OTP Widget API',
+      });
+
+      // Send real SMS OTP via MSG91 Official OTP Widget API
+      const smsResult = await sendMSG91OTP(cleanPhone);
+
+      if (!smsResult.success) {
+        return NextResponse.json({
+          error: smsResult.error || 'Unable to send OTP. Please try again.',
+        }, { status: smsResult.configured === false ? 503 : 500 });
+      }
+
+      await logAuditEvent({
+        ownerId: owner.id || `owner-${cleanPhone}`,
+        action: 'OTP_SENT',
+        ipAddress: ip,
+        userAgent,
+        note: `MSG91 real SMS OTP dispatched successfully (Req ID: ${smsResult.reqId || 'N/A'})`,
       });
 
       return NextResponse.json({
         requiresOtp: true,
         ownerId: owner.id,
         phone: cleanPhone,
+        reqId: smsResult.reqId,
         message: `A 6-digit verification code has been sent via SMS to your registered phone. Valid for 5 minutes.`,
       });
     }

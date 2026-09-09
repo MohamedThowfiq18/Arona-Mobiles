@@ -17,6 +17,13 @@ export default function OwnerSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const isAuthPage =
+    pathname === '/owner-portal/login' ||
+    pathname === '/owner-portal/verify-otp' ||
+    pathname === '/owner-portal/forgot-password';
+
+  if (isAuthPage) return null;
+
   const handleLogout = async () => {
     await fetch('/api/auth/owner-logout', { method: 'POST' });
     router.push('/owner-portal/login');

@@ -1,164 +1,271 @@
 // ============================================================
-// Multi-Gateway SMS Integration for ARONA MOBILES
-// Supports: Twilio, MSG91 (DLT Approved), Fast2SMS
-// Delivers real SMS to owner phone number.
-// OTP values are NEVER logged, exposed in console, or returned in API.
+// MSG91 Official OTP Widget / API Integration for ARONA MOBILES
+// Documentation: https://docs.msg91.com/otp-widget
+//
+// Endpoints:
+//   Send OTP:   POST https://api.msg91.com/api/v5/widget/sendOtp
+//   Retry OTP:  POST https://api.msg91.com/api/v5/widget/retryOtp
+//   Verify OTP: POST https://api.msg91.com/api/v5/widget/verifyOtp
+//
+// Environment Variables (Server-Side Only):
+//   MSG91_AUTH_KEY
+//   MSG91_WIDGET_ID
+//
+// All credentials and raw OTPs are NEVER exposed to browser bundles or logged.
 // ============================================================
 
 export interface SMSResult {
   success: boolean;
-  messageId?: string;
+  reqId?: string;
   provider?: string;
   error?: string;
+  configured?: boolean;
 }
 
-function maskPhone(cleanPhone: string): string {
-  if (cleanPhone.length < 10) return '***';
-  return `+91 ${cleanPhone.slice(0, 2)}****${cleanPhone.slice(-4)}`;
+export interface OTPVerifyResult {
+  success: boolean;
+  error?: string;
+  configured?: boolean;
+  accessToken?: string;
 }
 
 /**
- * Send a 6-digit OTP via real SMS to the destination mobile phone number.
- * Priority order:
- * 1. Twilio (Global SMS)
- * 2. MSG91 (India DLT OTP)
- * 3. Fast2SMS (India Quick OTP)
+ * Masks Indian phone numbers for safe display / logging (e.g. +91 XXXXXXX5672)
  */
-export async function sendOTPSMS(phone: string, otp: string): Promise<SMSResult> {
-  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+export function maskPhone(cleanPhone: string): string {
+  const digits = cleanPhone.replace(/\D/g, '').slice(-10);
+  if (digits.length < 10) return '***';
+  return `+91 XXXXXXX${digits.slice(-4)}`;
+}
+
+/**
+ * Normalizes Indian mobile number to clean 10 digits
+ * e.g. "+91 9994235672", "919994235672", "9994235672" -> "9994235672"
+ */
+export function normalizeIndianMobile(phone: string): string {
+  return String(phone || '').replace(/\D/g, '').slice(-10);
+}
+
+/**
+ * Sends a real SMS OTP via MSG91 Official OTP Widget / API
+ * POST https://api.msg91.com/api/v5/widget/sendOtp
+ */
+export async function sendMSG91OTP(phone: string): Promise<SMSResult> {
+  const cleanPhone = normalizeIndianMobile(phone);
   const masked = maskPhone(cleanPhone);
 
-  // ─── 1. TWILIO (Global SMS Gateway) ──────────────────────────────────────
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+  const authKey = process.env.MSG91_AUTH_KEY?.trim();
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
 
-  if (twilioSid && twilioToken && twilioFrom && !twilioSid.includes('your-twilio')) {
-    try {
-      const auth = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
-      const bodyParams = new URLSearchParams({
-        To: `+91${cleanPhone}`,
-        From: twilioFrom,
-        Body: `Your ARONA MOBILES Owner Portal verification code is: ${otp}. Valid for 5 minutes. Do not share this code.`,
-      });
-
-      const response = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: bodyParams.toString(),
-        }
-      );
-
-      const data = await response.json();
-      if (response.ok && data.sid) {
-        console.info(`📲 [Twilio] SMS successfully dispatched to ${masked} (SID: ${data.sid})`);
-        return { success: true, messageId: data.sid, provider: 'Twilio' };
-      } else {
-        console.error('Twilio dispatch error:', data.message || data.error_message || 'Unknown error');
-        return { success: false, error: data.message || 'Twilio SMS failed' };
-      }
-    } catch (e: any) {
-      console.error('Twilio network error:', e?.message || 'Connection failed');
-      return { success: false, error: 'SMS Gateway unreachable' };
-    }
+  // Validate server configuration — NO MOCK/FAKE OTP fallback
+  if (!authKey || !widgetId || authKey.includes('your_msg91') || widgetId.includes('your_widget')) {
+    console.error('[SMS Service] MSG91 configuration missing.');
+    return {
+      success: false,
+      configured: false,
+      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+    };
   }
 
-  // ─── 2. MSG91 (DLT Approved Indian SMS Gateway) ──────────────────────────
-  const msg91AuthKey = process.env.MSG91_AUTH_KEY;
-  const msg91TemplateId = process.env.MSG91_TEMPLATE_ID;
-  const msg91SenderId = process.env.MSG91_SENDER_ID || 'ARONA';
+  const formattedMobile = `91${cleanPhone}`;
 
-  if (msg91AuthKey && msg91TemplateId && !msg91AuthKey.includes('your-msg91')) {
-    try {
-      const payload = {
-        template_id: msg91TemplateId,
-        sender: msg91SenderId,
-        short_url: '0',
-        mobiles: `91${cleanPhone}`,
-        var1: otp,
+  try {
+    const response = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authkey': authKey,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        widgetId,
+        identifier: formattedMobile,
+        mobile: formattedMobile,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    // MSG91 returns { type: "success", message: "OTP sent successfully", reqId: "..." } or { type: "success", data: { reqId: "..." } }
+    const isSuccess =
+      response.ok &&
+      (data.type === 'success' ||
+        data.status === 'success' ||
+        data.status_code === 200 ||
+        data.return === true);
+
+    if (isSuccess) {
+      const reqId = data.reqId || data.data?.reqId || data.messageId || `req_${Date.now()}`;
+      console.info(`📲 [MSG91] Real SMS OTP dispatched successfully to ${masked} (Req ID: ${reqId})`);
+      return {
+        success: true,
+        reqId: String(reqId),
+        provider: 'MSG91',
       };
-
-      const response = await fetch('https://control.msg91.com/api/v5/otp', {
-        method: 'POST',
-        headers: {
-          'authkey': msg91AuthKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-      if (response.ok && data.type === 'success') {
-        console.info(`📲 [MSG91] SMS successfully dispatched to ${masked} (Req ID: ${data.request_id})`);
-        return { success: true, messageId: data.request_id, provider: 'MSG91' };
-      } else {
-        console.error('MSG91 dispatch error:', data?.message || 'Unknown error');
-        return { success: false, error: data.message || 'MSG91 dispatch failed' };
-      }
-    } catch (e: any) {
-      console.error('MSG91 network error:', e?.message || 'Connection failed');
-      return { success: false, error: 'SMS Gateway unreachable' };
+    } else {
+      const errorMsg = data.message || data.error || data.msg || 'MSG91 gateway rejected request';
+      console.error(`[SMS Service] MSG91 send failed for ${masked}:`, errorMsg);
+      return {
+        success: false,
+        error: 'Unable to send OTP. Please try again.',
+      };
     }
+  } catch (error: any) {
+    console.error(`[SMS Service] MSG91 network error for ${masked}:`, error?.message || 'Connection failed');
+    return {
+      success: false,
+      error: 'Unable to send OTP. Please try again.',
+    };
+  }
+}
+
+/**
+ * Retries/Resends an OTP via MSG91 Official Widget retry endpoint
+ * POST https://api.msg91.com/api/v5/widget/retryOtp
+ */
+export async function retryMSG91OTP(phone: string, reqId?: string): Promise<SMSResult> {
+  const cleanPhone = normalizeIndianMobile(phone);
+  const masked = maskPhone(cleanPhone);
+
+  const authKey = process.env.MSG91_AUTH_KEY?.trim();
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
+
+  if (!authKey || !widgetId || authKey.includes('your_msg91')) {
+    console.error('[SMS Service] MSG91 configuration missing.');
+    return {
+      success: false,
+      configured: false,
+      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+    };
   }
 
-  // ─── 3. FAST2SMS (India Quick SMS) ─────────────────────────────────────────
-  const fast2smsKey = process.env.FAST2SMS_API_KEY;
-  if (fast2smsKey && !fast2smsKey.includes('your-fast2sms')) {
+  // If reqId is available, call MSG91 retryOtp endpoint
+  if (reqId) {
     try {
-      let response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+      const response = await fetch('https://api.msg91.com/api/v5/widget/retryOtp', {
         method: 'POST',
         headers: {
-          'authorization': fast2smsKey,
           'Content-Type': 'application/json',
+          'authkey': authKey,
+          'Accept': 'application/json',
         },
         body: JSON.stringify({
-          route: 'otp',
-          variables_values: otp,
-          numbers: cleanPhone,
+          widgetId,
+          reqId,
+          retryType: '1', // 1: SMS retry
         }),
       });
 
-      let data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (data.return === false && data.message?.toLowerCase().includes('route')) {
-        response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-          method: 'POST',
-          headers: {
-            'authorization': fast2smsKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            route: 'q',
-            message: `Your ARONA MOBILES verification code is: ${otp}. Valid for 5 minutes.`,
-            language: 'english',
-            flash: 0,
-            numbers: cleanPhone,
-          }),
-        });
-        data = await response.json();
+      if (response.ok && (data.type === 'success' || data.status === 'success' || data.status_code === 200)) {
+        console.info(`📲 [MSG91] SMS OTP retry dispatched successfully for ${masked}`);
+        return {
+          success: true,
+          reqId: data.reqId || reqId,
+          provider: 'MSG91',
+        };
       }
-
-      if (data.return === true || data.status_code === 200) {
-        console.info(`📲 [Fast2SMS] SMS successfully dispatched to ${masked}`);
-        return { success: true, messageId: data.request_id, provider: 'Fast2SMS' };
-      } else {
-        console.error('Fast2SMS dispatch error:', data?.message || 'Unknown error');
-        return { success: false, error: 'Fast2SMS dispatch failed' };
-      }
-    } catch (e: any) {
-      console.error('Fast2SMS network error:', e?.message || 'Connection failed');
-      return { success: false, error: 'SMS Gateway unreachable' };
+    } catch {
+      // fallback to sendMSG91OTP if retryOtp encounters a transient issue
     }
   }
 
-  // Safe fallback notice for local development without configured API keys
-  console.info(`ℹ️ [SMS Service] Real SMS gateway not configured in .env.local for ${masked}.`);
-  return { success: true, messageId: `local-${Date.now()}`, provider: 'Simulated' };
+  // Fallback to fresh sendOtp
+  return sendMSG91OTP(cleanPhone);
+}
+
+/**
+ * Verifies the user-entered OTP with MSG91 server-side verification API
+ * POST https://api.msg91.com/api/v5/widget/verifyOtp
+ */
+export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: string): Promise<OTPVerifyResult> {
+  const cleanPhone = normalizeIndianMobile(phone);
+  const cleanOtp = String(enteredOTP || '').trim();
+  const masked = maskPhone(cleanPhone);
+
+  const authKey = process.env.MSG91_AUTH_KEY?.trim();
+  const widgetId = process.env.MSG91_WIDGET_ID?.trim();
+
+  if (!authKey || authKey.includes('your_msg91')) {
+    console.error('[SMS Service] MSG91 configuration missing.');
+    return {
+      success: false,
+      configured: false,
+      error: 'OTP service is temporarily unavailable. Please contact the administrator.',
+    };
+  }
+
+  if (!cleanOtp || !/^\d{4,8}$/.test(cleanOtp)) {
+    return {
+      success: false,
+      error: 'Invalid or expired OTP. Please try again.',
+    };
+  }
+
+  const formattedMobile = `91${cleanPhone}`;
+
+  try {
+    const payload: Record<string, any> = {
+      otp: cleanOtp,
+      mobile: formattedMobile,
+    };
+
+    if (widgetId && !widgetId.includes('your_widget')) {
+      payload.widgetId = widgetId;
+    }
+    if (reqId) {
+      payload.reqId = reqId;
+    }
+
+    const response = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authkey': authKey,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    // Check MSG91 success response
+    const isVerified =
+      (response.ok || data.status_code === 200) &&
+      (data.type === 'success' ||
+        data.status === 'success' ||
+        (typeof data.message === 'string' && /verified|success/i.test(data.message)) ||
+        data.data); // data contains the access_token/JWT if widget returns it
+
+    if (isVerified) {
+      console.info(`✅ [MSG91] SMS OTP verified successfully for ${masked}`);
+      return {
+        success: true,
+        accessToken: typeof data.data === 'string' ? data.data : undefined,
+      };
+    } else {
+      const errorMsg = data.message || data.error || data.msg || 'Invalid or expired OTP';
+      console.warn(`⚠️ [MSG91] SMS OTP verification failed for ${masked}:`, errorMsg);
+      return {
+        success: false,
+        error: 'Invalid or expired OTP. Please try again.',
+      };
+    }
+  } catch (error: any) {
+    console.error(`[SMS Service] MSG91 verify error for ${masked}:`, error?.message || 'Verification connection failed');
+    return {
+      success: false,
+      error: 'Unable to verify OTP. Please try again.',
+    };
+  }
+}
+
+/**
+ * Standard alias for sending OTP SMS
+ */
+export async function sendOTPSMS(phone: string): Promise<SMSResult> {
+  return sendMSG91OTP(phone);
 }
 
 /**
@@ -169,8 +276,8 @@ export async function sendOrderConfirmationSMS(
   orderNumber: string,
   total: number
 ): Promise<SMSResult> {
-  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  const cleanPhone = normalizeIndianMobile(phone);
   const masked = maskPhone(cleanPhone);
   console.info(`📦 [SMS Notification] Order ${orderNumber} confirmation queued for ${masked} (Total: ₹${total})`);
-  return { success: true, messageId: `order-${Date.now()}` };
+  return { success: true, reqId: `order-${Date.now()}` };
 }

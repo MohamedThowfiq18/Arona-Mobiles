@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateOTP, issueOTP, checkRateLimit } from '@/lib/otp';
-import { sendOTPSMS } from '@/lib/sms';
+import { checkRateLimit } from '@/lib/otp';
+import { sendMSG91OTP } from '@/lib/sms';
 import { STORE_CONFIG } from '@/lib/constants';
-import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { validatePhoneNumber, getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -27,9 +26,16 @@ export async function POST(request: NextRequest) {
 
     const cleanPhone = phoneValidation.cleanPhone;
 
-    // 1. Rate Limiting: Max 3 requests per 10 minutes
+    // 1. Rate Limiting Check
     const rateCheck = checkRateLimit(cleanPhone);
     if (!rateCheck.allowed) {
+      await logAuditEvent({
+        ownerId: `owner-${cleanPhone}`,
+        action: 'OTP_RATE_LIMITED',
+        ipAddress: ip,
+        userAgent,
+        note: `Rate limit hit during password recovery from phone ${cleanPhone}`,
+      });
       return NextResponse.json({
         error: `Too many requests. Please wait ${rateCheck.remainingMinutes} minute(s) before requesting another recovery code.`,
       }, { status: 429 });
@@ -48,40 +54,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(GENERIC_RECOVERY_RESPONSE);
     }
 
-    // 3. Generate 6-digit cryptographically secure code
-    const otp = generateOTP();
-    const { expiresAt, codeHash } = issueOTP(cleanPhone, otp, `owner-${cleanPhone}`, 'forgot_password');
+    await logAuditEvent({
+      ownerId: `owner-${cleanPhone}`,
+      action: 'OTP_REQUESTED',
+      ipAddress: ip,
+      userAgent,
+      note: 'Password recovery OTP requested via MSG91 OTP Widget API',
+    });
 
-    // 4. Record in database if configured
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseAdminClient();
-        await supabase.from('otp_codes').insert({
-          owner_id: `owner-${cleanPhone}`,
-          code_hash: codeHash,
-          expires_at: expiresAt.toISOString(),
-          used: false,
-        });
-      } catch {
-        // Continue
-      }
+    // 3. Dispatch real SMS OTP via MSG91 Official OTP Widget API
+    const smsResult = await sendMSG91OTP(cleanPhone);
+
+    if (!smsResult.success) {
+      return NextResponse.json({
+        error: smsResult.error || 'Unable to send OTP. Please try again.',
+      }, { status: smsResult.configured === false ? 503 : 500 });
     }
-
-    // 5. Send direct SMS OTP (never logged or returned in response)
-    await sendOTPSMS(cleanPhone, otp);
 
     await logAuditEvent({
       ownerId: `owner-${cleanPhone}`,
-      action: 'PASSWORD_RESET_REQUESTED',
+      action: 'OTP_SENT',
       ipAddress: ip,
       userAgent,
-      note: 'Password recovery SMS OTP dispatched',
+      note: `Password recovery MSG91 SMS OTP dispatched successfully (Req ID: ${smsResult.reqId || 'N/A'})`,
     });
 
     return NextResponse.json({
       success: true,
       phone: cleanPhone,
-      message: 'If this phone number is registered, a 6-digit recovery code has been sent via SMS. Valid for 5 minutes.',
+      reqId: smsResult.reqId,
+      message: 'A 6-digit recovery code has been sent via SMS to your registered phone. Valid for 5 minutes.',
     });
   } catch (e) {
     console.error('Password reset request error:', e);

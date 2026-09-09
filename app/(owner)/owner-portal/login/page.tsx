@@ -41,7 +41,8 @@ function OwnerLoginForm() {
 
       if (data.requiresOtp) {
         // First-time 2FA verification flow
-        router.push(`/owner-portal/verify-otp?id=${encodeURIComponent(data.ownerId)}&phone=${encodeURIComponent(phone)}`);
+        const reqIdParam = data.reqId ? `&reqId=${encodeURIComponent(data.reqId)}` : '';
+        router.push(`/owner-portal/verify-otp?id=${encodeURIComponent(data.ownerId || '')}&phone=${encodeURIComponent(phone)}${reqIdParam}`);
         return;
       }
 

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
-import { verifyOTP } from '@/lib/otp';
+import { verifyMSG91OTP, normalizeIndianMobile } from '@/lib/sms';
 import { createOwnerSession, setSessionCookie } from '@/lib/auth';
 import { getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
+import { STORE_CONFIG } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
@@ -11,33 +12,47 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { ownerId, otp } = body;
+    const { ownerId, phone, otp, reqId } = body;
 
-    if (!ownerId || !otp || typeof otp !== 'string') {
-      return NextResponse.json({ error: 'Verification code is required.' }, { status: 400 });
+    if ((!ownerId && !phone) || !otp) {
+      return NextResponse.json({ error: 'Mobile number and verification code are required.' }, { status: 400 });
     }
 
+    const cleanPhone = normalizeIndianMobile(phone || ownerId);
     const cleanOtp = String(otp).trim();
 
-    // Verify OTP using security engine (6 digits, 5-min expiry, max 5 attempts, single-use)
-    const verification = verifyOTP(ownerId, cleanOtp);
-
-    if (!verification.valid) {
+    // Check pre-approved owner authorization
+    if (!STORE_CONFIG.authorizedOwnerPhones.includes(cleanPhone)) {
       await logAuditEvent({
-        ownerId: String(ownerId),
+        ownerId: `unauthorized-${cleanPhone}`,
+        action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+        ipAddress: ip,
+        userAgent,
+        note: 'OTP verification attempted for non-authorized phone number',
+      });
+      return NextResponse.json({ error: 'Access Denied: Phone number is not authorized.' }, { status: 403 });
+    }
+
+    // Verify OTP using MSG91 official server-side verification API
+    const verification = await verifyMSG91OTP(cleanPhone, cleanOtp, reqId);
+
+    if (!verification.success) {
+      await logAuditEvent({
+        ownerId: `owner-${cleanPhone}`,
         action: 'OTP_FAILED',
         ipAddress: ip,
         userAgent,
-        note: `OTP verification failed: ${verification.error}`,
+        note: `MSG91 OTP verification failed: ${verification.error || 'Invalid or expired OTP.'}`,
       });
 
       return NextResponse.json({
-        error: verification.error || 'Invalid or expired verification code.',
-        attemptsRemaining: verification.attemptsRemaining,
-      }, { status: 401 });
+        error: verification.error || 'Invalid or expired OTP. Please try again.',
+      }, { status: verification.configured === false ? 503 : 400 });
     }
 
-    // Success: mark OTP verified
+    const resolvedOwnerId = ownerId || `owner-${cleanPhone}`;
+
+    // Success: mark owner as OTP verified in database
     if (isSupabaseConfigured()) {
       try {
         const supabase = getSupabaseAdminClient();
@@ -45,34 +60,37 @@ export async function POST(request: NextRequest) {
           otp_verified: true,
           last_login_at: new Date().toISOString(),
           last_login_device: deviceSummary,
-        }).eq('id', ownerId);
+        }).eq('phone', cleanPhone);
       } catch {
         // ignore
       }
     }
 
-    let ownerPhone = verification.phone || '';
-    if (!ownerPhone && String(ownerId).startsWith('owner-')) {
-      ownerPhone = String(ownerId).replace('owner-', '');
-    }
-
-    // Create session token
-    const token = await createOwnerSession(ownerId, ownerPhone);
+    // Create session token and set httpOnly cookie
+    const token = await createOwnerSession(resolvedOwnerId, cleanPhone);
     await setSessionCookie(token);
 
     await logAuditEvent({
-      ownerId: String(ownerId),
+      ownerId: `owner-${cleanPhone}`,
       action: 'OTP_VERIFIED',
       targetTable: 'owners',
-      targetId: String(ownerId),
+      targetId: resolvedOwnerId,
       ipAddress: ip,
       userAgent,
-      note: `2FA phone ownership verified successfully`,
+      note: 'MSG91 real OTP verified successfully',
+    });
+
+    await logAuditEvent({
+      ownerId: `owner-${cleanPhone}`,
+      action: 'LOGIN_SUCCESS',
+      ipAddress: ip,
+      userAgent,
+      note: `Owner logged in successfully (${deviceSummary})`,
     });
 
     const res = NextResponse.json({
       success: true,
-      message: 'Verification successful. Welcome to the Owner Portal.',
+      message: 'Login Successful! Welcome back to ARONA MOBILES Owner Portal.',
     });
 
     res.cookies.set('arona_owner_session', token, {
