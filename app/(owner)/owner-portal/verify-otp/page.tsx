@@ -63,7 +63,7 @@ function OTPForm() {
 
   const verify = async () => {
     const code = otp.join('');
-    if (code.length < 6 || loading || success) return;
+    if (code.length < 4 || loading || success) return;
     setLoading(true);
     setError('');
     setResendMsg('');
@@ -176,7 +176,7 @@ function OTPForm() {
               id="otp-verify-btn"
               className="btn btn--primary btn--full btn--lg"
               onClick={verify}
-              disabled={loading || success || otp.join('').length < 6}
+              disabled={loading || success || otp.join('').length < 4}
             >
               {loading ? 'Verifying...' : 'Verify & Sign In →'}
             </button>
