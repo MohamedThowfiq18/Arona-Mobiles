@@ -279,38 +279,8 @@ function OwnerLoginForm() {
       }
     };
 
-    // If MSG91 Web SDK verifyOtp is available
-    if (typeof window.verifyOtp === 'function') {
-      window.verifyOtp(
-        code,
-        async (data: any) => {
-          console.info('[MSG91 OTP] Verify success:', data);
-          let token = '';
-          if (typeof data === 'string') {
-            token = data;
-          } else if (data && typeof data === 'object') {
-            token = data.message || data.token || data.accessToken || data.data || '';
-          }
-
-          if (!token) {
-            token = `verified_${Date.now()}`;
-          }
-
-          await verifyAccessTokenOnServer(token);
-        },
-        (errorObj: any) => {
-          console.error('[MSG91 OTP] Verify failure error object:', errorObj);
-          const errMsg =
-            (errorObj && typeof errorObj === 'object'
-              ? errorObj.message || errorObj.error || errorObj.msg
-              : String(errorObj)) || 'Invalid or expired OTP. Please try again.';
-          setError(errMsg);
-          setLoading(false);
-        },
-        reqId || undefined
-      );
-    } else {
-      // Fallback: Verify directly on server endpoint
+    const verifyDirectlyOnServer = async () => {
+      console.info('[MSG91 OTP] Verifying OTP directly via server API...');
       try {
         const res = await fetch('/api/auth/owner-otp-verify', {
           method: 'POST',
@@ -328,16 +298,49 @@ function OwnerLoginForm() {
           return;
         }
 
+        console.info('[MSG91 OTP] Server-side OTP verification succeeded!');
         setSuccess(true);
         setLoading(false);
         setTimeout(() => {
           router.push(redirectUrl);
           router.refresh();
         }, 700);
-      } catch {
-        setError('Verification failed. Please try again.');
+      } catch (err: any) {
+        console.error('[MSG91 OTP] Server verification network error:', err);
+        setError('Verification failed. Please check your connection and try again.');
         setLoading(false);
       }
+    };
+
+    // If MSG91 Web SDK verifyOtp is available
+    if (typeof window.verifyOtp === 'function') {
+      window.verifyOtp(
+        code,
+        async (data: any) => {
+          console.info('[MSG91 OTP] Web SDK Verify success:', data);
+          let token = '';
+          if (typeof data === 'string') {
+            token = data;
+          } else if (data && typeof data === 'object') {
+            token = data.message || data.token || data.accessToken || data.data || '';
+          }
+
+          if (!token) {
+            token = `verified_${Date.now()}`;
+          }
+
+          await verifyAccessTokenOnServer(token);
+        },
+        async (errorObj: any) => {
+          console.warn('[MSG91 OTP] Web SDK verifyOtp returned error; falling back to direct server verification:', errorObj);
+          // Seamless fallback to server verification API
+          await verifyDirectlyOnServer();
+        },
+        reqId || undefined
+      );
+    } else {
+      // Direct server verification
+      await verifyDirectlyOnServer();
     }
   };
 

@@ -247,20 +247,18 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
 
   const formattedMobile = `91${cleanPhone}`;
 
-  // 1. Try Widget verifyOtp endpoint
+  // 1. Try Widget verifyOtp endpoint if reqId is available or via direct widget verify
   try {
     const payload: Record<string, any> = {
       otp: cleanOtp,
       mobile: formattedMobile,
+      widgetId,
     };
-    if (widgetId && !widgetId.includes('your_widget')) {
-      payload.widgetId = widgetId;
-    }
     if (reqId) {
       payload.reqId = reqId;
     }
 
-    const widgetResponse = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', {
+    const widgetResponse = await fetch('https://control.msg91.com/api/v5/widget/verifyOtp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -272,28 +270,25 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
 
     const widgetData = await widgetResponse.json().catch(() => ({}));
 
-    const isWidgetVerified =
-      (widgetResponse.ok || widgetData.status_code === 200) &&
-      (widgetData.type === 'success' ||
-        widgetData.status === 'success' ||
-        (typeof widgetData.message === 'string' && /verified|success/i.test(widgetData.message)) ||
-        widgetData.data);
-
-    if (isWidgetVerified) {
-      console.info(`✅ [MSG91] SMS OTP verified successfully for ${masked}`);
+    if (
+      widgetResponse.ok &&
+      widgetData.type === 'success' &&
+      !widgetData.hasError
+    ) {
+      console.info(`✅ [MSG91] Widget SMS OTP verified successfully for ${masked}`);
       return {
         success: true,
         accessToken: typeof widgetData.data === 'string' ? widgetData.data : undefined,
       };
     }
   } catch {
-    // Continue to direct v5 verify
+    // Continue to standard v5 verify
   }
 
-  // 2. Direct v5 verify endpoint
+  // 2. Direct v5 verify endpoint with 91 prefix
   try {
-    const v5VerifyUrl = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${encodeURIComponent(formattedMobile)}&authkey=${encodeURIComponent(authKey)}`;
-    const v5Response = await fetch(v5VerifyUrl, {
+    const v5UrlWith91 = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${encodeURIComponent(formattedMobile)}&authkey=${encodeURIComponent(authKey)}`;
+    const v5Response = await fetch(v5UrlWith91, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -303,18 +298,43 @@ export async function verifyMSG91OTP(phone: string, enteredOTP: string, reqId?: 
 
     const v5Data = await v5Response.json().catch(() => ({}));
 
-    const isV5Verified =
+    if (
       (v5Response.ok || v5Data.status_code === 200) &&
       (v5Data.type === 'success' ||
         v5Data.status === 'success' ||
-        (typeof v5Data.message === 'string' && /verified|success/i.test(v5Data.message)));
+        (typeof v5Data.message === 'string' && /verified|success/i.test(v5Data.message)))
+    ) {
+      console.info(`✅ [MSG91] SMS OTP (91-prefix) verified successfully for ${masked}`);
+      return { success: true };
+    }
+  } catch {
+    // Continue to 10-digit verify
+  }
 
-    if (isV5Verified) {
-      console.info(`✅ [MSG91] SMS OTP verified successfully for ${masked}`);
+  // 3. Direct v5 verify endpoint with 10-digit mobile
+  try {
+    const v5Url10 = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${encodeURIComponent(cleanPhone)}&authkey=${encodeURIComponent(authKey)}`;
+    const v5Response10 = await fetch(v5Url10, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+
+    const v5Data10 = await v5Response10.json().catch(() => ({}));
+
+    if (
+      (v5Response10.ok || v5Data10.status_code === 200) &&
+      (v5Data10.type === 'success' ||
+        v5Data10.status === 'success' ||
+        (typeof v5Data10.message === 'string' && /verified|success/i.test(v5Data10.message)))
+    ) {
+      console.info(`✅ [MSG91] SMS OTP (10-digit) verified successfully for ${masked}`);
       return { success: true };
     } else {
-      const errorMsg = v5Data.message || v5Data.error || v5Data.msg || 'Invalid or expired OTP';
-      console.warn(`⚠️ [MSG91] SMS OTP verification failed for ${masked}:`, errorMsg);
+      const errorMsg = v5Data10.message || v5Data10.error || v5Data10.msg || 'Invalid or expired OTP';
+      console.warn(`⚠️ [MSG91] SMS OTP verification rejected for ${masked}:`, errorMsg);
       return {
         success: false,
         error: 'Invalid or expired OTP. Please try again.',
