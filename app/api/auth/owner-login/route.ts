@@ -216,77 +216,53 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── 5. First-time Login MFA Check: Require Real MSG91 SMS OTP ─────
-    if (!owner.otp_verified) {
-      const rateCheck = checkRateLimit(cleanPhone);
-      if (!rateCheck.allowed) {
-        await logAuditEvent({
-          ownerId: owner.id || `owner-${cleanPhone}`,
-          action: 'OTP_RATE_LIMITED',
-          ipAddress: ip,
-          userAgent,
-          note: `Too many OTP requests from phone ${cleanPhone}`,
-        });
-        return NextResponse.json({
-          error: `Too many OTP requests. Please wait ${rateCheck.remainingMinutes} minute(s) before requesting another code.`,
-        }, { status: 429 });
-      }
-
+    // ── 5. Always Require Real MSG91 SMS OTP ────────────────────────
+    const rateCheck = checkRateLimit(cleanPhone);
+    if (!rateCheck.allowed) {
       await logAuditEvent({
         ownerId: owner.id || `owner-${cleanPhone}`,
-        action: 'OTP_REQUESTED',
+        action: 'OTP_RATE_LIMITED',
         ipAddress: ip,
         userAgent,
-        note: 'First-time login OTP requested via MSG91 OTP Widget API',
+        note: `Too many OTP requests from phone ${cleanPhone}`,
       });
-
-      // Send real SMS OTP via MSG91 Official OTP Widget API
-      const smsResult = await sendMSG91OTP(cleanPhone);
-
-      if (!smsResult.success) {
-        return NextResponse.json({
-          error: smsResult.error || 'Unable to send OTP. Please try again.',
-        }, { status: smsResult.configured === false ? 503 : 500 });
-      }
-
-      await logAuditEvent({
-        ownerId: owner.id || `owner-${cleanPhone}`,
-        action: 'OTP_SENT',
-        ipAddress: ip,
-        userAgent,
-        note: `MSG91 real SMS OTP dispatched successfully (Req ID: ${smsResult.reqId || 'N/A'})`,
-      });
-
       return NextResponse.json({
-        requiresOtp: true,
-        ownerId: owner.id,
-        phone: cleanPhone,
-        reqId: smsResult.reqId,
-        message: `A 6-digit verification code has been sent via SMS to your registered phone. Valid for 5 minutes.`,
-      });
+        error: `Too many OTP requests. Please wait ${rateCheck.remainingMinutes} minute(s) before requesting another code.`,
+      }, { status: 429 });
     }
 
-    // ── 6. Authenticated Session Creation ─────────────────────────────
-    const token = await createOwnerSession(owner.id, cleanPhone);
-
     await logAuditEvent({
-      ownerId: owner.id,
-      action: 'LOGIN_SUCCESS',
+      ownerId: owner.id || `owner-${cleanPhone}`,
+      action: 'OTP_REQUESTED',
       ipAddress: ip,
       userAgent,
-      note: `Owner signed in successfully (${deviceSummary})`,
+      note: 'Login OTP requested via MSG91 OTP Widget API',
     });
 
-    const res = NextResponse.json({ success: true, phone: cleanPhone });
-    res.cookies.set('arona_owner_session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 3600, // 7 days
-      path: '/',
+    // Send real SMS OTP via MSG91 Official OTP Widget API
+    const smsResult = await sendMSG91OTP(cleanPhone);
+
+    if (!smsResult.success) {
+      return NextResponse.json({
+        error: smsResult.error || 'Unable to send OTP. Please try again.',
+      }, { status: smsResult.configured === false ? 503 : 500 });
+    }
+
+    await logAuditEvent({
+      ownerId: owner.id || `owner-${cleanPhone}`,
+      action: 'OTP_SENT',
+      ipAddress: ip,
+      userAgent,
+      note: `MSG91 real SMS OTP dispatched successfully (Req ID: ${smsResult.reqId || 'N/A'})`,
     });
 
-    return res;
+    return NextResponse.json({
+      requiresOtp: true,
+      ownerId: owner.id,
+      phone: cleanPhone,
+      reqId: smsResult.reqId,
+      message: `A 6-digit verification code has been sent via SMS to your registered phone. Valid for 15 minutes.`,
+    });
   } catch (e) {
     console.error('Owner login unexpected error:', e);
     // Generic safe error message (never leak database/internal details)
