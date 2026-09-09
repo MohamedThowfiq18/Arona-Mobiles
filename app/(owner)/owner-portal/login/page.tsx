@@ -167,50 +167,91 @@ function OwnerLoginForm() {
       console.info(`[MSG91 OTP] Widget ID configured: ${Boolean(MSG91_WIDGET_ID)}`);
       console.info(`[MSG91 OTP] Widget token configured: ${Boolean(MSG91_WIDGET_TOKEN)}`);
 
-      // Ensure widget is initialized
-      if (typeof window.sendOtp !== 'function') {
+      // 3. Ensure MSG91 Web SDK is ready or auto-fallback to server MSG91 dispatch
+      let sendOtpFunc = typeof window.sendOtp === 'function' ? window.sendOtp : null;
+
+      if (!sendOtpFunc) {
         initializeMsg91Widget();
-      }
-
-      if (typeof window.sendOtp !== 'function') {
-        console.error('[MSG91 OTP] SEND FAILED: window.sendOtp not available');
-        setError('MSG91 OTP Widget is initializing. Please click Sign In again in a moment.');
-        setLoading(false);
-        return;
-      }
-
-      // 3. Trigger MSG91 Custom Web SDK sendOtp
-      window.sendOtp(
-        normalizedMobile,
-        (data: any) => {
-          console.info('[MSG91 OTP] SEND SUCCESS', data);
-
-          const reqId = extractMsg91ReqId(data);
-
-          if (!reqId) {
-            console.error('[MSG91 OTP] SUCCESS BUT reqId MISSING', data);
-            setError('MSG91 returned success but request ID was not found. Please try again.');
-            setLoading(false);
-            return;
+        // Wait up to 1.5s for Web SDK to mount methods
+        const startWait = Date.now();
+        while (Date.now() - startWait < 1500) {
+          if (typeof window.sendOtp === 'function') {
+            sendOtpFunc = window.sendOtp;
+            break;
           }
+          await new Promise(r => setTimeout(r, 100));
+        }
+      }
 
+      if (sendOtpFunc) {
+        // Trigger MSG91 Custom Web SDK sendOtp
+        sendOtpFunc(
+          normalizedMobile,
+          (data: any) => {
+            console.info('[MSG91 OTP] SEND SUCCESS', data);
+
+            const reqId = extractMsg91ReqId(data);
+
+            if (!reqId) {
+              console.error('[MSG91 OTP] SUCCESS BUT reqId MISSING', data);
+              setError('MSG91 returned success but request ID was not found. Please try again.');
+              setLoading(false);
+              return;
+            }
+
+            console.info('[MSG91 OTP] REQID RECEIVED:', reqId);
+            setMsg91ReqId(reqId);
+            setStep('otp');
+            console.info('[MSG91 OTP] OTP SCREEN SHOWN');
+            setCooldown(30);
+            setLoading(false);
+          },
+          (errorObj: any) => {
+            console.error('[MSG91 OTP] SEND FAILED', errorObj);
+            const errMsg =
+              (errorObj && typeof errorObj === 'object'
+                ? errorObj.message || errorObj.error || errorObj.msg
+                : String(errorObj)) || 'MSG91 OTP send failed. Check the browser console.';
+            setError(errMsg);
+            setLoading(false);
+          }
+        );
+      } else {
+        // Direct Server-Side MSG91 OTP dispatch fallback
+        console.info('[MSG91 OTP] Dispatching real SMS OTP via Server MSG91 API...');
+        const loginRes = await fetch('/api/auth/owner-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone, password }),
+        });
+        const loginData = await loginRes.json().catch(() => ({}));
+
+        if (!loginRes.ok || loginData.error) {
+          setError(loginData.error || 'Unable to send OTP SMS. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        if (loginData.requiresOtp) {
+          const reqId = loginData.reqId || '';
+          console.info('[MSG91 OTP] SEND SUCCESS (Server)', reqId);
           console.info('[MSG91 OTP] REQID RECEIVED:', reqId);
           setMsg91ReqId(reqId);
           setStep('otp');
           console.info('[MSG91 OTP] OTP SCREEN SHOWN');
           setCooldown(30);
           setLoading(false);
-        },
-        (errorObj: any) => {
-          console.error('[MSG91 OTP] SEND FAILED', errorObj);
-          const errMsg =
-            (errorObj && typeof errorObj === 'object'
-              ? errorObj.message || errorObj.error || errorObj.msg
-              : String(errorObj)) || 'MSG91 OTP send failed. Check the browser console.';
-          setError(errMsg);
-          setLoading(false);
+          return;
         }
-      );
+
+        // Direct login if already verified
+        setSuccess(true);
+        setLoading(false);
+        setTimeout(() => {
+          router.push(redirectUrl);
+          router.refresh();
+        }, 700);
+      }
     } catch (err: any) {
       console.error('[MSG91 OTP] SEND FAILED:', err);
       setError('Connection error. Please check your network and try again.');
