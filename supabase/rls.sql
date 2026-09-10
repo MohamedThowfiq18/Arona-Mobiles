@@ -161,9 +161,13 @@ CREATE POLICY "Users manage own recently viewed"
 -- No public policies; accessed only via service role key in server actions
 
 -- ============================================================
--- OWNERS — service role only
+-- OWNERS — secure access for server-side auth
 -- ============================================================
--- No public policies for owners table
+DROP POLICY IF EXISTS "Allow server access on owners" ON public.owners;
+CREATE POLICY "Allow server access on owners"
+  ON public.owners FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
 
 -- ============================================================
 -- AUDIT LOG — service role only (write), owner can read own

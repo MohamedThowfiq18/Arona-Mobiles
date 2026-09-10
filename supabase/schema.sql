@@ -46,6 +46,13 @@ ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS session_version INT NOT NULL 
 ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
+ALTER TABLE public.owners ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow server access on owners" ON public.owners;
+CREATE POLICY "Allow server access on owners"
+  ON public.owners FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
 -- ============================================================
 -- OTP CODES
 -- ============================================================
