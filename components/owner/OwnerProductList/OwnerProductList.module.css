@@ -1,6 +1,35 @@
-.filters { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; align-items: center; }
-.searchInput { flex: 1; min-width: 200px; }
-.resultCount { font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap; }
+.filters {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.searchInput {
+  flex: 1;
+  min-width: 180px;
+}
+.resultCount {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .searchInput {
+    grid-column: 1 / -1;
+    min-width: 100%;
+  }
+  .resultCount {
+    grid-column: 1 / -1;
+    font-size: var(--text-xs);
+  }
+}
 
 .tableWrap {
   background: var(--color-bg);

@@ -256,3 +256,21 @@
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 480px) {
+  .page {
+    padding: var(--space-4) var(--space-3);
+  }
+  .card {
+    padding: var(--space-5) var(--space-4);
+  }
+  .otpRow {
+    gap: 4px;
+  }
+  .otpBox {
+    width: 38px;
+    height: 48px;
+    font-size: var(--text-lg);
+  }
+}
+
+

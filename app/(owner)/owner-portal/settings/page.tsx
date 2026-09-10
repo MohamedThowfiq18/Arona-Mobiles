@@ -337,7 +337,7 @@ export default function OwnerSettingsPage() {
 
               <div className="form-group">
                 <label className="form-label">City, State, Pincode</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '6px' }}>
+                <div className={styles.cityGrid}>
                   <input className="form-input" value={city} onChange={e => setCity(e.target.value)} placeholder="City" />
                   <input className="form-input" value={state} onChange={e => setState(e.target.value)} placeholder="State" />
                   <input className="form-input" value={pincode} onChange={e => setPincode(e.target.value)} placeholder="PIN" />

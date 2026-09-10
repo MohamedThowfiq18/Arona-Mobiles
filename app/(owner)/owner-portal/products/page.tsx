@@ -11,7 +11,7 @@ export default async function OwnerProductsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Products</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
