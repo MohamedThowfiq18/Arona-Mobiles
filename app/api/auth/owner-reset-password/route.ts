@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMSG91OTP, normalizeIndianMobile } from '@/lib/sms';
 import bcrypt from 'bcryptjs';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
-import { invalidateOwnerSessions, verifyPasswordResetToken } from '@/lib/auth';
+import { invalidateOwnerSessions, verifyPasswordResetToken, saveOwnerPassword } from '@/lib/auth';
 import { validatePhoneNumber, getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 import { STORE_CONFIG } from '@/lib/constants';
@@ -135,60 +135,15 @@ export async function POST(request: NextRequest) {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     const ownerId = `owner-${cleanPhone}`;
 
-    // 4. Invalidate ALL existing active sessions for this owner (Laptop A, mobile, etc.)
-    invalidateOwnerSessions(ownerId, cleanPhone);
-
-    // 5. Update password in Supabase PostgreSQL (Single source of truth)
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseAdminClient();
-
-        // Check if owner already exists
-        const { data: existingOwner } = await supabase
-          .from('owners')
-          .select('id, phone, session_version')
-          .eq('phone', cleanPhone)
-          .maybeSingle();
-
-        if (existingOwner?.id) {
-          const newSessionVersion = (existingOwner.session_version || 1) + 1;
-          await supabase
-            .from('owners')
-            .update({
-              password_hash: passwordHash,
-              otp_verified: true,
-              failed_login_attempts: 0,
-              locked_until: null,
-              password_updated_at: new Date().toISOString(),
-              session_version: newSessionVersion,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingOwner.id);
-        } else {
-          await supabase
-            .from('owners')
-            .insert({
-              phone: cleanPhone,
-              password_hash: passwordHash,
-              otp_verified: true,
-              failed_login_attempts: 0,
-              locked_until: null,
-              password_updated_at: new Date().toISOString(),
-              session_version: 1,
-              created_at: new Date().toISOString(),
-            });
-        }
-      } catch (dbErr) {
-        console.error('Database error saving updated password in Supabase:', dbErr);
-      }
-    }
+    // 4. Save new password to Supabase PostgreSQL & server store, and invalidate old sessions
+    await saveOwnerPassword(cleanPhone, passwordHash);
 
     await logAuditEvent({
       ownerId,
       action: 'PASSWORD_RESET_COMPLETED',
       ipAddress: ip,
       userAgent,
-      note: 'Owner password successfully updated, old password hash replaced, and previous sessions invalidated',
+      note: 'Owner password successfully updated in Supabase PostgreSQL & server store; old password invalidated',
     });
 
     return NextResponse.json({

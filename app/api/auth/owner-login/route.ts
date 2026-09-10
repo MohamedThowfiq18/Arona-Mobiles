@@ -3,7 +3,12 @@ import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/ser
 import bcrypt from 'bcryptjs';
 import { checkRateLimit } from '@/lib/otp';
 import { sendMSG91OTP } from '@/lib/sms';
-import { createOwnerSession } from '@/lib/auth';
+import {
+  createOwnerSession,
+  getOwnerRecord,
+  recordOwnerLoginSuccess,
+  recordOwnerFailedAttempt,
+} from '@/lib/auth';
 import { STORE_CONFIG } from '@/lib/constants';
 import { getStoreSettings } from '@/lib/settings';
 import {
@@ -65,22 +70,8 @@ export async function POST(request: NextRequest) {
     ];
     const isAuthorizedPhone = authorizedList.includes(cleanPhone);
 
-
-    let owner: any = null;
-
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseAdminClient();
-        const { data } = await supabase
-          .from('owners')
-          .select('*')
-          .eq('phone', cleanPhone)
-          .single();
-        owner = data;
-      } catch {
-        // Fallback gracefully
-      }
-    }
+    // Retrieve owner credential record from Supabase PostgreSQL (or server store)
+    const owner = await getOwnerRecord(cleanPhone);
 
     // If phone is not authorized in store config, simulate work and return generic error
     if (!isAuthorizedPhone) {
@@ -130,32 +121,17 @@ export async function POST(request: NextRequest) {
       const phoneLock = recordFailedLogin(`phone:${cleanPhone}`);
       recordFailedLogin(`ip:${ip}`);
 
-      if (isSupabaseConfigured()) {
-        try {
-          const supabase = getSupabaseAdminClient();
-          const attempts = (owner.failed_login_attempts || 0) + 1;
-          const lockedUntil = attempts >= 5
-            ? new Date(Date.now() + 15 * 60000).toISOString()
-            : null;
-          await supabase.from('owners').update({
-            failed_login_attempts: attempts,
-            ...(lockedUntil ? { locked_until: lockedUntil } : {}),
-            updated_at: new Date().toISOString(),
-          }).eq('id', owner.id);
-        } catch {
-          // ignore
-        }
-      }
+      const dbLock = await recordOwnerFailedAttempt(owner.id, cleanPhone, ip);
 
       await logAuditEvent({
         ownerId: owner.id || `owner-${cleanPhone}`,
         action: 'LOGIN_FAILED',
         ipAddress: ip,
         userAgent,
-        note: phoneLock.locked ? 'Password incorrect - Account locked for 15 mins' : 'Password incorrect (old/invalid password)',
+        note: (phoneLock.locked || dbLock.locked) ? 'Password incorrect - Account locked for 15 mins' : 'Password incorrect (old/invalid password)',
       });
 
-      if (phoneLock.locked) {
+      if (phoneLock.locked || dbLock.locked) {
         return NextResponse.json({
           error: 'Too many failed login attempts. Account locked for 15 minutes.',
         }, { status: 429 });
@@ -168,20 +144,7 @@ export async function POST(request: NextRequest) {
     clearLoginRateLimit(`phone:${cleanPhone}`);
     clearLoginRateLimit(`ip:${ip}`);
 
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseAdminClient();
-        await supabase.from('owners').update({
-          failed_login_attempts: 0,
-          locked_until: null,
-          last_login_at: new Date().toISOString(),
-          last_login_device: deviceSummary,
-          updated_at: new Date().toISOString(),
-        }).eq('id', owner.id);
-      } catch {
-        // ignore
-      }
-    }
+    await recordOwnerLoginSuccess(owner.id, cleanPhone, deviceSummary);
 
     // If client requested credential validation before calling MSG91 Web SDK sendOtp
     if (body.checkOnly) {

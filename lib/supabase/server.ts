@@ -54,7 +54,15 @@ export async function getSupabaseServerClient() {
  */
 export function getSupabaseAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key';
+  const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const rawAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+  const serviceKey =
+    rawServiceKey && !rawServiceKey.includes('placeholder') && !rawServiceKey.includes('your-supabase')
+      ? rawServiceKey
+      : rawAnonKey && !rawAnonKey.includes('placeholder') && !rawAnonKey.includes('your-supabase')
+      ? rawAnonKey
+      : 'placeholder-service-key';
 
   return createClient(
     url,
