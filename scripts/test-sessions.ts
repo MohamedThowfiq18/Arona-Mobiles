@@ -30,7 +30,7 @@ async function runMultiDeviceSessionTests() {
 
   const tokenDev3 = await createOwnerSession(ownerId, ownerPhone);
   const sessionDev3 = await verifyOwnerSession(tokenDev3);
-  if (!sessionDev3) throw new Error('Device 3 (iPhone) created. Session ID:', sessionDev3.sessionId);
+  if (!sessionDev3) throw new Error('Device 3 session verification failed');
   console.log('   ✓ Device 3 (iPhone) created. Session ID:', sessionDev3.sessionId);
 
   // Step 2: Fetch active sessions from Device 1's perspective
