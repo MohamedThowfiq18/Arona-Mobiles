@@ -27,8 +27,6 @@
 .viewAll:hover { opacity: 0.8; }
 
 /* ── Category tiles ── */
-.categories {}
-
 .categoryGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -18,7 +18,7 @@ export default async function HomePage() {
       <HeroBanner />
 
       {/* Category Tiles */}
-      <section className={`section ${styles.categories}`}>
+      <section className="section">
         <div className="container">
           <h2 className="section-title">Shop by Category</h2>
           <div className={styles.categoryGrid}>
