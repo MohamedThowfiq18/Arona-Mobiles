@@ -8,7 +8,27 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. CREATE / UPDATE PRODUCTS TABLE
+-- 2. CREATE / UPDATE OWNERS AUTH TABLE
+CREATE TABLE IF NOT EXISTS public.owners (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  phone TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  otp_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  failed_login_attempts INT NOT NULL DEFAULT 0,
+  locked_until TIMESTAMPTZ,
+  session_version INT NOT NULL DEFAULT 1,
+  password_updated_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ,
+  last_login_device TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1;
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 3. CREATE / UPDATE PRODUCTS TABLE
 CREATE TABLE IF NOT EXISTS public.products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   brand TEXT NOT NULL,
@@ -119,6 +139,14 @@ DROP POLICY IF EXISTS "Allow delete on products" ON public.products;
 CREATE POLICY "Allow delete on products"
 ON public.products FOR DELETE
 USING (true);
+
+-- Owners table RLS policies
+ALTER TABLE public.owners ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access on owners" ON public.owners;
+CREATE POLICY "Service role full access on owners"
+ON public.owners FOR ALL
+USING (true)
+WITH CHECK (true);
 
 -- 5. STORAGE BUCKET: product-images (PUBLIC ACCESS)
 -- Creates the public storage bucket for phone photos

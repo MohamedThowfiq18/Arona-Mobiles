@@ -34,10 +34,17 @@ CREATE TABLE IF NOT EXISTS public.owners (
   otp_verified BOOLEAN NOT NULL DEFAULT FALSE,
   failed_login_attempts INT NOT NULL DEFAULT 0,
   locked_until TIMESTAMPTZ,
+  session_version INT NOT NULL DEFAULT 1,
+  password_updated_at TIMESTAMPTZ DEFAULT NOW(),
   last_login_at TIMESTAMPTZ,
   last_login_device TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1;
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ============================================================
 -- OTP CODES

@@ -147,14 +147,17 @@ export function clearLoginRateLimit(key: string) {
 }
 
 // ── Session Versioning (For Invalidation on Password Reset) ──
-export function getActiveSessionVersion(ownerId: string): number {
-  return sessionVersionStore.get(ownerId) ?? 1;
+export function getActiveSessionVersion(identifier: string): number {
+  const cleanKey = identifier.replace(/\D/g, '').slice(-10) || identifier;
+  return sessionVersionStore.get(cleanKey) ?? 1;
 }
 
-export function bumpSessionVersion(ownerId: string): number {
-  const current = getActiveSessionVersion(ownerId);
+export function bumpSessionVersion(identifier: string): number {
+  const cleanKey = identifier.replace(/\D/g, '').slice(-10) || identifier;
+  const current = getActiveSessionVersion(cleanKey);
   const next = current + 1;
-  sessionVersionStore.set(ownerId, next);
+  sessionVersionStore.set(cleanKey, next);
+  sessionVersionStore.set(identifier, next);
   return next;
 }
 

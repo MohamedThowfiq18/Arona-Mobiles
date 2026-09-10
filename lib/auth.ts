@@ -62,11 +62,15 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
  */
 export async function createOwnerSession(ownerId: string, phone: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const currentVersion = getActiveSessionVersion(ownerId);
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10) || phone;
+  const currentVersion = Math.max(
+    getActiveSessionVersion(ownerId),
+    getActiveSessionVersion(cleanPhone)
+  );
 
   const payload: OwnerSession = {
     ownerId,
-    phone,
+    phone: cleanPhone,
     role: 'owner',
     version: currentVersion,
     iat: now,
@@ -109,8 +113,11 @@ export async function verifyOwnerSession(token: string): Promise<OwnerSession | 
     if (payload.role !== 'owner') return null;
 
     // 3. Invalidation check (if password was changed and session version bumped)
-    const activeVersion = getActiveSessionVersion(payload.ownerId);
-    if (payload.version && payload.version < activeVersion) {
+    const activeVersionOwner = getActiveSessionVersion(payload.ownerId);
+    const activeVersionPhone = payload.phone ? getActiveSessionVersion(payload.phone) : 1;
+    const requiredActiveVersion = Math.max(activeVersionOwner, activeVersionPhone);
+
+    if (payload.version && payload.version < requiredActiveVersion) {
       return null;
     }
 
@@ -123,8 +130,11 @@ export async function verifyOwnerSession(token: string): Promise<OwnerSession | 
 /**
  * Invalidate all active sessions for a specific owner (e.g. on password reset)
  */
-export function invalidateOwnerSessions(ownerId: string): void {
+export function invalidateOwnerSessions(ownerId: string, phone?: string): void {
   bumpSessionVersion(ownerId);
+  if (phone) {
+    bumpSessionVersion(phone);
+  }
 }
 
 export interface PasswordResetTokenPayload {

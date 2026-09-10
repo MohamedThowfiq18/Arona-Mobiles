@@ -100,117 +100,86 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
     }
 
-    // Initial setup if owner account does not exist in DB yet
-    if (!owner) {
-      // Default fallback master check for initial setup
-      const isMasterPassword = password === 'admin123' || password === 'owner123' || password === 'arona123';
-      if (!isMasterPassword) {
-        recordFailedLogin(`phone:${cleanPhone}`);
-        recordFailedLogin(`ip:${ip}`);
-        await logAuditEvent({
-          ownerId: `phone-${cleanPhone}`,
-          action: 'LOGIN_FAILED',
-          ipAddress: ip,
-          userAgent,
-          note: 'Invalid initial password attempt',
-        });
-        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
-      }
+    // If owner account does not exist in DB yet, reject authentication
+    if (!owner || !owner.password_hash) {
+      // Fake bcrypt compare to prevent timing side-channel attacks
+      await bcrypt.compare(password, '$2a$10$e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      recordFailedLogin(`phone:${cleanPhone}`);
+      recordFailedLogin(`ip:${ip}`);
+      await logAuditEvent({
+        ownerId: `phone-${cleanPhone}`,
+        action: 'LOGIN_FAILED',
+        ipAddress: ip,
+        userAgent,
+        note: 'Login attempted for owner account without registered password in database',
+      });
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+    }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+    // Check database lock status if exists
+    if (owner.locked_until && new Date(owner.locked_until) > new Date()) {
+      return NextResponse.json({
+        error: 'Account temporarily locked due to failed attempts. Please try again later.',
+      }, { status: 429 });
+    }
 
-      if (isSupabaseConfigured()) {
-        try {
-          const supabase = getSupabaseAdminClient();
-          const { data: newOwner } = await supabase
-            .from('owners')
-            .insert({
-              phone: cleanPhone,
-              password_hash: passwordHash,
-              otp_verified: false,
-              last_login_device: deviceSummary,
-            })
-            .select()
-            .single();
-          owner = newOwner;
-        } catch {
-          // Fallback
-        }
-      }
+    // ── 4. Verify Password with bcrypt against stored hash in DB ──────
+    const valid = await bcrypt.compare(password, owner.password_hash);
 
-      owner = owner || {
-        id: `owner-${cleanPhone}`,
-        phone: cleanPhone,
-        otp_verified: false,
-        password_hash: passwordHash,
-      };
-    } else {
-      // Check database lock status if exists
-      if (owner.locked_until && new Date(owner.locked_until) > new Date()) {
-        return NextResponse.json({
-          error: 'Account temporarily locked due to failed attempts. Please try again later.',
-        }, { status: 429 });
-      }
-
-      // ── 4. Verify Password with bcrypt ─────────────────────────────
-      let valid = false;
-      if (owner.password_hash) {
-        valid = await bcrypt.compare(password, owner.password_hash);
-      }
-
-      if (!valid) {
-        const phoneLock = recordFailedLogin(`phone:${cleanPhone}`);
-        recordFailedLogin(`ip:${ip}`);
-
-        if (isSupabaseConfigured()) {
-          try {
-            const supabase = getSupabaseAdminClient();
-            const attempts = (owner.failed_login_attempts || 0) + 1;
-            const lockedUntil = attempts >= 5
-              ? new Date(Date.now() + 15 * 60000).toISOString()
-              : null;
-            await supabase.from('owners').update({
-              failed_login_attempts: attempts,
-              ...(lockedUntil ? { locked_until: lockedUntil } : {}),
-            }).eq('id', owner.id);
-          } catch {
-            // ignore
-          }
-        }
-
-        await logAuditEvent({
-          ownerId: owner.id || `owner-${cleanPhone}`,
-          action: 'LOGIN_FAILED',
-          ipAddress: ip,
-          userAgent,
-          note: phoneLock.locked ? 'Password incorrect - Account locked for 15 mins' : 'Password incorrect',
-        });
-
-        if (phoneLock.locked) {
-          return NextResponse.json({
-            error: 'Too many failed login attempts. Account locked for 15 minutes.',
-          }, { status: 429 });
-        }
-
-        return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
-      }
-
-      // Password is valid → reset failure counters
-      clearLoginRateLimit(`phone:${cleanPhone}`);
-      clearLoginRateLimit(`ip:${ip}`);
+    if (!valid) {
+      const phoneLock = recordFailedLogin(`phone:${cleanPhone}`);
+      recordFailedLogin(`ip:${ip}`);
 
       if (isSupabaseConfigured()) {
         try {
           const supabase = getSupabaseAdminClient();
+          const attempts = (owner.failed_login_attempts || 0) + 1;
+          const lockedUntil = attempts >= 5
+            ? new Date(Date.now() + 15 * 60000).toISOString()
+            : null;
           await supabase.from('owners').update({
-            failed_login_attempts: 0,
-            locked_until: null,
-            last_login_at: new Date().toISOString(),
-            last_login_device: deviceSummary,
+            failed_login_attempts: attempts,
+            ...(lockedUntil ? { locked_until: lockedUntil } : {}),
+            updated_at: new Date().toISOString(),
           }).eq('id', owner.id);
         } catch {
           // ignore
         }
+      }
+
+      await logAuditEvent({
+        ownerId: owner.id || `owner-${cleanPhone}`,
+        action: 'LOGIN_FAILED',
+        ipAddress: ip,
+        userAgent,
+        note: phoneLock.locked ? 'Password incorrect - Account locked for 15 mins' : 'Password incorrect (old/invalid password)',
+      });
+
+      if (phoneLock.locked) {
+        return NextResponse.json({
+          error: 'Too many failed login attempts. Account locked for 15 minutes.',
+        }, { status: 429 });
+      }
+
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+    }
+
+    // Password is valid → reset failure counters
+    clearLoginRateLimit(`phone:${cleanPhone}`);
+    clearLoginRateLimit(`ip:${ip}`);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdminClient();
+        await supabase.from('owners').update({
+          failed_login_attempts: 0,
+          locked_until: null,
+          last_login_at: new Date().toISOString(),
+          last_login_device: deviceSummary,
+          updated_at: new Date().toISOString(),
+        }).eq('id', owner.id);
+      } catch {
+        // ignore
       }
     }
 
