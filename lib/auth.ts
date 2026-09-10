@@ -127,6 +127,67 @@ export function invalidateOwnerSessions(ownerId: string): void {
   bumpSessionVersion(ownerId);
 }
 
+export interface PasswordResetTokenPayload {
+  ownerId: string;
+  phone: string;
+  role: 'owner';
+  purpose: 'PASSWORD_RESET';
+  iat: number;
+  exp: number;
+}
+
+/**
+ * Create a secure, short-lived (15 min) password reset authorization token
+ */
+export async function createPasswordResetToken(ownerId: string, phone: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const payload: PasswordResetTokenPayload = {
+    ownerId,
+    phone,
+    role: 'owner',
+    purpose: 'PASSWORD_RESET',
+    iat: now,
+    exp: now + 15 * 60, // 15 minutes
+  };
+
+  const header = textToBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = textToBase64Url(JSON.stringify(payload));
+  const data = new TextEncoder().encode(`${header}.${body}`);
+
+  const key = await getHmacKey(SECRET_KEY);
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, data);
+  const sig = bytesToBase64Url(new Uint8Array(sigBuffer));
+
+  return `${header}.${body}.${sig}`;
+}
+
+/**
+ * Verify a password reset token for validity, expiration, and owner identity
+ */
+export async function verifyPasswordResetToken(token: string, expectedPhone?: string): Promise<PasswordResetTokenPayload | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, body, sig] = parts;
+
+    const data = new TextEncoder().encode(`${header}.${body}`);
+    const key = await getHmacKey(SECRET_KEY);
+    const sigBytes = base64UrlToBytes(sig);
+
+    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes as any, data as any);
+    if (!isValid) return null;
+
+    const payload = JSON.parse(base64UrlToText(body)) as PasswordResetTokenPayload;
+    if (Date.now() / 1000 > payload.exp) return null;
+    if (payload.role !== 'owner' || payload.purpose !== 'PASSWORD_RESET') return null;
+    if (expectedPhone && payload.phone !== expectedPhone) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Set the session cookie (httpOnly, secure in prod, sameSite: lax)
  */
