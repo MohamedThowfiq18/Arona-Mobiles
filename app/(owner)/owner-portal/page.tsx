@@ -6,6 +6,8 @@ import { getStoreSettings } from '@/lib/settings';
 import styles from './page.module.css';
 
 export const metadata: Metadata = { title: 'Dashboard' };
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 function formatPrice(p: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(p);

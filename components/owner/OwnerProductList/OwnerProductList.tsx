@@ -21,6 +21,35 @@ export default function OwnerProductList({ initialProducts }: Props) {
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  const refreshProducts = async () => {
+    try {
+      const res = await fetch('/api/owner/products', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshProducts();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', refreshProducts);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', refreshProducts);
+    };
+  }, []);
+
   // Realtime subscription for live dashboard updates
   useEffect(() => {
     const supabase = getSupabaseClient();

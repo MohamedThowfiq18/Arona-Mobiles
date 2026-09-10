@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Product } from '@/lib/types';
 import ProductCard from '@/components/customer/ProductCard/ProductCard';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -28,6 +28,36 @@ export default function RealtimeProductGrid({
     setProducts(initialProducts);
   }, [initialProducts]);
 
+  const refreshProducts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/products', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      }
+    } catch {
+      // ignore network errors
+    }
+  }, []);
+
+  useEffect(() => {
+    // Listen for tab focus to refresh stock immediately
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshProducts();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', refreshProducts);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', refreshProducts);
+    };
+  }, [refreshProducts]);
+
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
 
@@ -52,7 +82,6 @@ export default function RealtimeProductGrid({
             } else if (eventType === 'UPDATE') {
               const updatedP = payload.new as Product;
               setProducts(prev => {
-                // If product is deactivated, remove from public grid
                 if (updatedP.is_active === false) {
                   return prev.filter(p => p.id !== updatedP.id);
                 }
@@ -62,7 +91,6 @@ export default function RealtimeProductGrid({
                   copy[index] = { ...copy[index], ...updatedP };
                   return copy;
                 }
-                // If was inactive and now active, add it
                 return [updatedP, ...prev];
               });
             } else if (eventType === 'DELETE') {

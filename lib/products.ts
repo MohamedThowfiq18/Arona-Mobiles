@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import type { Product, ShopFilters } from '@/lib/types';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
@@ -25,7 +26,8 @@ function writeLocalProducts(products: Product[]) {
     }
     fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Error writing local products.json:', err);
+    // On Vercel / serverless runtime, filesystem may be read-only; silently ignore or warn
+    console.warn('Local products.json write skipped (read-only environment):', err);
   }
 }
 
@@ -44,6 +46,14 @@ function normalizeProduct(p: any): Product {
     ...p,
     image_url: primaryImg,
     images: imgList,
+    price: Number(p.price) || 0,
+    discount_price: p.discount_price ? Number(p.discount_price) : undefined,
+    stock: Number(p.stock) || 0,
+    is_active: p.is_active ?? true,
+    is_featured: Boolean(p.is_featured),
+    specs: p.specs || {},
+    variants: Array.isArray(p.variants) ? p.variants : [],
+    tags: Array.isArray(p.tags) ? p.tags : [],
   };
 }
 
@@ -56,8 +66,11 @@ export async function getAllProducts(includeInactive = false): Promise<Product[]
         query = query.eq('is_active', true);
       }
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return (data as any[]).map(normalizeProduct);
+      }
+      if (error) {
+        console.warn('Supabase products fetch error:', error);
       }
     } catch (err) {
       console.warn('Supabase fetch failed, falling back to local file:', err);
@@ -74,19 +87,22 @@ export async function getProductByIdOrSlug(idOrSlug: string): Promise<Product | 
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      // Try ID first, then slug
-      let { data } = await supabase.from('products').select('*').eq('id', idOrSlug).single();
-      if (!data) {
-        const res = await supabase.from('products').select('*').eq('slug', idOrSlug).single();
-        data = res.data;
+      // Try ID first if it looks like a valid UUID, then slug
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+      
+      if (isUUID) {
+        const { data } = await supabase.from('products').select('*').eq('id', idOrSlug).single();
+        if (data) return normalizeProduct(data);
       }
-      if (data) return data as Product;
+      
+      const res = await supabase.from('products').select('*').eq('slug', idOrSlug).single();
+      if (res.data) return normalizeProduct(res.data);
     } catch {
       // Fallback
     }
   }
 
-  const local = readLocalProducts();
+  const local = readLocalProducts().map(normalizeProduct);
   return local.find(p => p.id === idOrSlug || p.slug === idOrSlug) || null;
 }
 
@@ -109,9 +125,10 @@ export async function getPreOwnedProducts(): Promise<Product[]> {
 }
 
 export async function createProduct(productData: Partial<Product>): Promise<Product> {
-  const localProducts = readLocalProducts();
+  const id = productData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productData.id)
+    ? productData.id
+    : randomUUID();
 
-  const id = productData.id || `p${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const slug = productData.slug || productData.model?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `phone-${Date.now()}`;
   const now = new Date().toISOString();
 
@@ -123,7 +140,7 @@ export async function createProduct(productData: Partial<Product>): Promise<Prod
     model: productData.model || 'New Phone',
     slug,
     condition: productData.condition || 'new',
-    grade: productData.grade,
+    grade: productData.grade || undefined,
     short_description: productData.short_description || `${productData.brand} ${productData.model}`,
     description: productData.description || productData.short_description,
     specs: productData.specs || {},
@@ -146,68 +163,119 @@ export async function createProduct(productData: Partial<Product>): Promise<Prod
     updated_at: now,
   };
 
-  // 1. Always update local store so it's guaranteed persistent and immediately available
-  localProducts.unshift(newProduct);
-  writeLocalProducts(localProducts);
-
-  // 2. Also try writing to Supabase if configured
+  // 1. Primary persistence to Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      await supabase.from('products').insert(newProduct);
+      const { error } = await supabase.from('products').insert(newProduct);
+      if (error) {
+        console.error('Supabase product insert error:', error);
+      }
     } catch (err) {
       console.warn('Supabase product insert failed:', err);
     }
+  }
+
+  // 2. Safe local store fallback
+  try {
+    const localProducts = readLocalProducts();
+    localProducts.unshift(newProduct);
+    writeLocalProducts(localProducts);
+  } catch (err) {
+    console.warn('Local product write skipped:', err);
   }
 
   return newProduct;
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product | null> {
-  const localProducts = readLocalProducts();
-  const index = localProducts.findIndex(p => p.id === id);
-
-  if (index === -1) return null;
-
-  const normalizedUpdates = {
+  const normalizedUpdates: Record<string, any> = {
     ...updates,
     ...(updates.image_url && !updates.images ? { images: [updates.image_url] } : {}),
     ...(updates.images && updates.images.length > 0 && !updates.image_url ? { image_url: updates.images[0] } : {}),
-  };
-
-  const updated: Product = {
-    ...localProducts[index],
-    ...normalizedUpdates,
+    ...(updates.price !== undefined ? { price: Number(updates.price) } : {}),
+    ...(updates.discount_price !== undefined ? { discount_price: updates.discount_price ? Number(updates.discount_price) : null } : {}),
+    ...(updates.stock !== undefined ? { stock: Number(updates.stock) } : {}),
     updated_at: new Date().toISOString(),
   };
 
-  localProducts[index] = updated;
-  writeLocalProducts(localProducts);
+  let updatedProduct: Product | null = null;
 
+  // 1. Primary update to Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      await supabase.from('products').update(normalizedUpdates).eq('id', id);
+      const { data, error } = await supabase
+        .from('products')
+        .update(normalizedUpdates)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        updatedProduct = normalizeProduct(data);
+      } else if (error) {
+        console.warn('Supabase product update error:', error);
+      }
     } catch (err) {
       console.warn('Supabase product update failed:', err);
     }
   }
 
-  return updated;
+  // 2. Also update local cache
+  try {
+    const localProducts = readLocalProducts();
+    const index = localProducts.findIndex(p => p.id === id);
+    if (index !== -1) {
+      const merged = normalizeProduct({
+        ...localProducts[index],
+        ...normalizedUpdates,
+      });
+      localProducts[index] = merged;
+      writeLocalProducts(localProducts);
+      if (!updatedProduct) updatedProduct = merged;
+    }
+  } catch (err) {
+    console.warn('Local product update skipped:', err);
+  }
+
+  if (updatedProduct) return updatedProduct;
+
+  // If local had it even without Supabase
+  const fallback = await getProductByIdOrSlug(id);
+  if (fallback) {
+    return normalizeProduct({
+      ...fallback,
+      ...normalizedUpdates,
+    });
+  }
+
+  return null;
 }
 
 export async function deleteProduct(id: string): Promise<boolean> {
-  const localProducts = readLocalProducts();
-  const filtered = localProducts.filter(p => p.id !== id);
-  writeLocalProducts(filtered);
+  let deletedFromSupabase = false;
 
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      await supabase.from('products').delete().eq('id', id);
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (!error) {
+        deletedFromSupabase = true;
+      } else {
+        console.warn('Supabase product delete error:', error);
+      }
     } catch (err) {
       console.warn('Supabase product delete failed:', err);
     }
+  }
+
+  try {
+    const localProducts = readLocalProducts();
+    const filtered = localProducts.filter(p => p.id !== id);
+    writeLocalProducts(filtered);
+  } catch (err) {
+    console.warn('Local product delete skipped:', err);
   }
 
   return true;

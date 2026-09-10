@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { updateProduct, deleteProduct, getProductByIdOrSlug } from '@/lib/products';
 import { requireOwnerSession } from '@/lib/auth';
 import { sanitizeString, validatePositiveNumber, getClientIP } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
@@ -69,6 +72,19 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update product.' }, { status: 404 });
     }
 
+    // Invalidate Next.js cache
+    try {
+      revalidatePath('/', 'layout');
+      revalidatePath('/shop');
+      revalidatePath('/certified-preowned');
+      revalidatePath(`/product/${id}`);
+      if (existing.slug) revalidatePath(`/product/${existing.slug}`);
+      revalidatePath('/owner-portal/products');
+      revalidatePath('/owner-portal');
+    } catch (e) {
+      console.warn('Revalidation warning:', e);
+    }
+
     // Determine if price changed
     const isPriceChanged = existing.price !== updated.price;
     await logAuditEvent({
@@ -109,6 +125,19 @@ export async function DELETE(
     const existing = await getProductByIdOrSlug(id);
 
     await deleteProduct(id);
+
+    // Invalidate Next.js cache
+    try {
+      revalidatePath('/', 'layout');
+      revalidatePath('/shop');
+      revalidatePath('/certified-preowned');
+      revalidatePath(`/product/${id}`);
+      if (existing?.slug) revalidatePath(`/product/${existing.slug}`);
+      revalidatePath('/owner-portal/products');
+      revalidatePath('/owner-portal');
+    } catch (e) {
+      console.warn('Revalidation warning:', e);
+    }
 
     await logAuditEvent({
       ownerId,

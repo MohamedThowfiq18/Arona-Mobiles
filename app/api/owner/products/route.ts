@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getAllProducts, createProduct } from '@/lib/products';
 import { requireOwnerSession } from '@/lib/auth';
 import { sanitizeString, validatePositiveNumber, getClientIP } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const auth = await requireOwnerSession(request);
@@ -53,6 +56,17 @@ export async function POST(request: NextRequest) {
     };
 
     const product = await createProduct(sanitizedData);
+
+    // Invalidate Next.js and Vercel cache across all relevant paths
+    try {
+      revalidatePath('/', 'layout');
+      revalidatePath('/shop');
+      revalidatePath('/certified-preowned');
+      revalidatePath('/owner-portal/products');
+      revalidatePath('/owner-portal');
+    } catch (e) {
+      console.warn('Revalidation warning:', e);
+    }
 
     await logAuditEvent({
       ownerId,

@@ -1,18 +1,16 @@
 import type { Metadata } from 'next';
-import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { Product } from '@/lib/types';
-import ProductCard from '@/components/customer/ProductCard/ProductCard';
+import { getPreOwnedProducts } from '@/lib/products';
+import RealtimeProductGrid from '@/components/customer/RealtimeProductGrid/RealtimeProductGrid';
 import CartProvider from '@/components/customer/CartProvider/CartProvider';
 import styles from './page.module.css';
 
 export const metadata: Metadata = { title: 'Certified Pre-Owned Phones' };
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function CertifiedPreOwnedPage() {
-  const supabase = await getSupabaseServerClient();
-  const { data } = await supabase.from('products').select('*')
-    .eq('condition', 'pre-owned').eq('is_active', true)
-    .order('grade').order('price', { ascending: true });
-  const products = (data as Product[]) || [];
+  const products = await getPreOwnedProducts();
 
   const gradeA = products.filter(p => p.grade === 'A');
   const gradeB = products.filter(p => p.grade === 'B');
@@ -69,19 +67,17 @@ export default async function CertifiedPreOwnedPage() {
           </div>
         </section>
 
-        {/* Products by grade */}
-        {[{ label: 'Grade A — Like New', products: gradeA }, { label: 'Grade B — Good', products: gradeB }, { label: 'Grade C — Fair (Best Value)', products: gradeC }]
-          .filter(g => g.products.length > 0)
-          .map(g => (
-            <section key={g.label} className="section section--gray">
-              <div className="container">
-                <h2 className="section-title">{g.label}</h2>
-                <div className={styles.productGrid}>
-                  {g.products.map(p => <ProductCard key={p.id} product={p} />)}
-                </div>
-              </div>
-            </section>
-          ))}
+        {/* Live Pre-Owned Products Grid */}
+        <section className="section section--gray">
+          <div className="container">
+            <h2 className="section-title">All Certified Pre-Owned Phones ({products.length})</h2>
+            <RealtimeProductGrid
+              initialProducts={products}
+              filterCondition="pre-owned"
+              emptyMessage="No certified pre-owned phones in stock right now. Please check back soon or contact store!"
+            />
+          </div>
+        </section>
 
         {products.length === 0 && (
           <div className={styles.empty}>

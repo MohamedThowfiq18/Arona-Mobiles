@@ -6,6 +6,9 @@ import RealtimeProductGrid from '@/components/customer/RealtimeProductGrid/Realt
 import { getFeaturedProducts, getPreOwnedProducts } from '@/lib/products';
 import styles from './page.module.css';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function HomePage() {
   const [featured, preOwned] = await Promise.all([
     getFeaturedProducts(),
