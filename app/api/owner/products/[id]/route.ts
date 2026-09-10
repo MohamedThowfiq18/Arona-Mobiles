@@ -110,10 +110,10 @@ export async function PUT(
     });
 
     return NextResponse.json({ success: true, product: updated });
-  } catch (error) {
-    console.error('Error updating product:', error);
+  } catch (error: any) {
+    console.error('Error updating product in Supabase:', error);
     return NextResponse.json(
-      { error: 'Failed to update product details.' },
+      { error: error?.message || 'Failed to update product details in database.' },
       { status: 500 }
     );
   }
@@ -159,10 +159,10 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true, message: 'Product deleted successfully.' });
-  } catch (error) {
-    console.error('Error deleting product:', error);
+  } catch (error: any) {
+    console.error('Error deleting product in Supabase:', error);
     return NextResponse.json(
-      { error: 'Failed to delete product.' },
+      { error: error?.message || 'Failed to delete product from database.' },
       { status: 500 }
     );
   }

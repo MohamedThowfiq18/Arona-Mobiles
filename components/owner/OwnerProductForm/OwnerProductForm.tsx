@@ -80,7 +80,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Upload real image files to Supabase Storage (product-images) or local backend
+  // Upload real image files to Supabase Storage (product-images bucket)
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
     const remainingSlots = 5 - images.length;
@@ -93,7 +93,6 @@ export default function OwnerProductForm({ mode, product }: Props) {
     setUploading(true);
 
     try {
-      const supabase = getSupabaseClient();
       const newUrls: string[] = [];
 
       for (const file of filesToUpload) {
@@ -108,44 +107,23 @@ export default function OwnerProductForm({ mode, product }: Props) {
           continue;
         }
 
-        let uploadedUrl: string | null = null;
-
-        // 1. Try uploading to Supabase Storage bucket: product-images
-        try {
-          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-          const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-          const filePath = `phones/${fileName}`;
-
-          const { data, error } = await supabase.storage
-            .from('product-images')
-            .upload(filePath, file, { cacheControl: '3600', upsert: true });
-
-          if (!error && data) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('product-images')
-              .getPublicUrl(data.path);
-            uploadedUrl = publicUrl;
-          }
-        } catch {
-          // Supabase storage not connected / fallback
+        const formData = new FormData();
+        formData.append('file', file);
+        if (product?.id) {
+          formData.append('productId', product.id);
         }
 
-        // 2. Fallback to /api/owner/upload
-        if (!uploadedUrl) {
-          const formData = new FormData();
-          formData.append('file', file);
+        const res = await fetch('/api/owner/upload', {
+          method: 'POST',
+          body: formData,
+        });
 
-          const res = await fetch('/api/owner/upload', {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await res.json();
-          if (res.ok && data.success) {
-            uploadedUrl = data.url || (Array.isArray(data.urls) ? data.urls[0] : null);
-          }
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Failed to upload ${file.name} to Supabase Storage.`);
         }
 
+        const uploadedUrl = data.url || (Array.isArray(data.urls) ? data.urls[0] : null);
         if (uploadedUrl) {
           newUrls.push(uploadedUrl);
         }
@@ -156,14 +134,15 @@ export default function OwnerProductForm({ mode, product }: Props) {
         showToast({
           type: 'success',
           title: 'Photo uploaded!',
-          message: `${newUrls.length} image${newUrls.length > 1 ? 's' : ''} saved to product media.`,
+          message: `${newUrls.length} image${newUrls.length > 1 ? 's' : ''} stored in Supabase Storage.`,
         });
       }
     } catch (err: unknown) {
+      console.error('Photo upload error:', err);
       showToast({
         type: 'error',
         title: 'Upload failed',
-        message: err instanceof Error ? err.message : 'Please try again',
+        message: err instanceof Error ? err.message : 'Failed to upload photo to Supabase Storage.',
       });
     } finally {
       setUploading(false);

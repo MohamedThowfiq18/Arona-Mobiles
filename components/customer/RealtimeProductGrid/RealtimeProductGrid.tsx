@@ -67,6 +67,27 @@ export default function RealtimeProductGrid({
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
 
+    function normalizeRealtimeProduct(p: any): Product {
+      const primaryImg = p.image_url || (Array.isArray(p.images) && p.images[0]) || '';
+      const imgList = Array.isArray(p.images) && p.images.length > 0 ? p.images : (primaryImg ? [primaryImg] : []);
+      return {
+        ...p,
+        id: String(p.id),
+        brand: p.brand || 'Other',
+        model: p.model || 'New Phone',
+        price: Number(p.price) || 0,
+        original_price: p.original_price ? Number(p.original_price) : undefined,
+        discount_price: p.discount_price ? Number(p.discount_price) : undefined,
+        stock: Number(p.stock) || 0,
+        is_active: p.is_active ?? p.published ?? true,
+        published: p.published ?? p.is_active ?? true,
+        is_featured: Boolean(p.is_featured ?? p.featured),
+        featured: Boolean(p.featured ?? p.is_featured),
+        image_url: primaryImg,
+        images: imgList,
+      };
+    }
+
     try {
       const supabase = getSupabaseClient();
       const channel = supabase
@@ -78,16 +99,18 @@ export default function RealtimeProductGrid({
             const eventType = payload.eventType;
 
             if (eventType === 'INSERT') {
-              const newP = payload.new as Product;
+              const newP = normalizeRealtimeProduct(payload.new);
               const isVisible = newP.is_active !== false && newP.published !== false;
               if (isVisible) {
                 setProducts(prev => {
-                  if (prev.some(p => String(p.id) === String(newP.id))) return prev;
+                  if (prev.some(p => String(p.id) === String(newP.id))) {
+                    return prev.map(p => String(p.id) === String(newP.id) ? newP : p);
+                  }
                   return [newP, ...prev];
                 });
               }
             } else if (eventType === 'UPDATE') {
-              const updatedP = payload.new as Product;
+              const updatedP = normalizeRealtimeProduct(payload.new);
               const isVisible = updatedP.is_active !== false && updatedP.published !== false;
               setProducts(prev => {
                 if (!isVisible) {

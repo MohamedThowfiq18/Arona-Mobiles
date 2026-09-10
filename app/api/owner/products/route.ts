@@ -90,10 +90,10 @@ export async function POST(request: NextRequest) {
       message: 'Product added successfully!',
       product,
     }, { status: 201 });
-  } catch (error) {
-    console.error('Error creating product:', error);
+  } catch (error: any) {
+    console.error('Error creating product in Supabase:', error);
     return NextResponse.json(
-      { error: 'Failed to create product. Please check input parameters.' },
+      { error: error?.message || 'Failed to create product in database. Please check input parameters.' },
       { status: 500 }
     );
   }

@@ -51,7 +51,12 @@ ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variant TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS ram TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS storage TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS color TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS short_description TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS specs JSONB DEFAULT '{}'::JSONB;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variants JSONB DEFAULT '[]'::JSONB;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS discount_price NUMERIC;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS offer TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS available BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT FALSE;
@@ -59,8 +64,17 @@ ALTER TABLE public.products ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT T
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sku TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS flash_sale_ends_at TIMESTAMPTZ;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS inspection_report JSONB DEFAULT '{}'::JSONB;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3,2) DEFAULT 5.0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS review_count INT DEFAULT 1;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sold_count INT DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- Create Indexes for fast querying
 CREATE INDEX IF NOT EXISTS idx_products_brand ON public.products(brand);

@@ -28,33 +28,7 @@ async function fetchProducts(params: Record<string, string | string[] | undefine
   const maxPrice = params.maxPrice ? Number(params.maxPrice) : undefined;
   const sort     = (params.sort as SortOption) || 'newest';
 
-  try {
-    const supabase = await getSupabaseServerClient();
-
-    let q = supabase.from('products').select('*').eq('is_active', true);
-
-    if (brand)     q = q.ilike('brand', brand);
-    if (condition) q = q.eq('condition', condition);
-    if (category)  q = q.eq('category_id', category);
-    if (minPrice)  q = q.gte('price', minPrice);
-    if (maxPrice)  q = q.lte('price', maxPrice);
-
-    switch (sort) {
-      case 'price_asc':   q = q.order('price', { ascending: true }); break;
-      case 'price_desc':  q = q.order('price', { ascending: false }); break;
-      case 'popularity':  q = q.order('sold_count', { ascending: false }); break;
-      case 'rating':      q = q.order('average_rating', { ascending: false }); break;
-      default:            q = q.order('created_at', { ascending: false }); break;
-    }
-
-    const { data } = await q.limit(48);
-    if (data && data.length > 0) return data as Product[];
-  } catch {
-    // fallback
-  }
-
-  // Fallback to local products store
-  let list = await getAllProducts();
+  let list = await getAllProducts(false);
 
   if (brand) list = list.filter(p => p.brand.toLowerCase() === brand.toLowerCase());
   if (condition) list = list.filter(p => p.condition === condition);
