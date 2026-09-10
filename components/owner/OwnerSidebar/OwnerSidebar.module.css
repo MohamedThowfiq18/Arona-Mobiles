@@ -148,8 +148,8 @@
   color: #FFFFFF;
 }
 
-/* ── Mobile Layout (<= 768px) ── */
-@media (max-width: 768px) {
+/* ── Mobile Layout (<= 1023px) ── */
+@media (max-width: 1023px) {
   .mobileHeader {
     display: flex;
     align-items: center;
