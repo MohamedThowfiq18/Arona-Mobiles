@@ -5,6 +5,7 @@ import { createOwnerSession, setSessionCookie } from '@/lib/auth';
 import { getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 import { STORE_CONFIG } from '@/lib/constants';
+import { getStoreSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +24,14 @@ export async function POST(request: NextRequest) {
     const cleanPhone = normalizeIndianMobile(phone || ownerId);
     const cleanOtp = String(otp).trim();
 
-    // Check pre-approved owner authorization
-    if (!STORE_CONFIG.authorizedOwnerPhones.includes(cleanPhone)) {
+    // Check dynamic & pre-approved owner authorization
+    const storeSettings = await getStoreSettings();
+    const authorizedList = [
+      ...STORE_CONFIG.authorizedOwnerPhones,
+      ...(storeSettings.authorized_owner_phones || []),
+    ];
+
+    if (!authorizedList.includes(cleanPhone)) {
       await logAuditEvent({
         ownerId: `unauthorized-${cleanPhone}`,
         action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -34,6 +41,7 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ error: 'Access Denied: Phone number is not authorized.' }, { status: 403 });
     }
+
 
     // Verify OTP using MSG91 official server-side verification API
     const verification = await verifyMSG91OTP(cleanPhone, cleanOtp, reqId);

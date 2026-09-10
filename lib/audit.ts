@@ -20,7 +20,9 @@ export interface AuditEventParams {
     | 'PRICE_UPDATED'
     | 'COUPON_CREATED'
     | 'COUPON_UPDATED'
+    | 'STORE_SETTINGS_UPDATED'
     | 'UNAUTHORIZED_ACCESS_ATTEMPT';
+
   targetTable?: string;
   targetId?: string;
   oldData?: Record<string, any>;

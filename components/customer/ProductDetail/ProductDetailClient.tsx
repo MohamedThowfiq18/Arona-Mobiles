@@ -5,8 +5,9 @@ import Link from 'next/link';
 import type { Product, Review, ProductQA, ProductVariant } from '@/lib/types';
 import ProductCard from '@/components/customer/ProductCard/ProductCard';
 import CartProvider, { useCart } from '@/components/customer/CartProvider/CartProvider';
-import { STORE_CONFIG, getWhatsAppInquiryUrl } from '@/lib/constants';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './ProductDetailClient.module.css';
+
 
 interface Props {
   product: Product;
@@ -33,12 +34,15 @@ function Stars({ rating }: { rating: number }) {
 
 function ProductDetailInner({ product, reviews, qa, similar }: Props) {
   const { addToCart } = useCart();
+  const { settings, primaryPhone, primaryPhoneRaw, secondaryPhone, getWhatsAppInquiryUrl } = useStoreSettings();
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | undefined>(
     product.variants?.[0]
   );
   const [activeImage, setActiveImage] = useState(0);
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<'specs' | 'reviews' | 'qa'>('specs');
+
+
 
   const displayPrice = selectedVariant?.discount_price ?? selectedVariant?.price
     ?? product.discount_price ?? product.price;
@@ -252,13 +256,14 @@ function ProductDetailInner({ product, reviews, qa, similar }: Props) {
             <div className={styles.quickContactTitle}>Direct Store Inquiry &amp; Instant Booking:</div>
             <div className={styles.quickContactGrid}>
               <a
-                href={`tel:${STORE_CONFIG.phoneRaw}`}
+                href={`tel:${primaryPhoneRaw}`}
                 className={styles.detailCallBtn}
-                title="Call store directly"
+                title={`Call store: ${primaryPhone} / ${secondaryPhone}`}
                 id="product-call-buy-btn"
               >
-                <span>📞</span> Call to Buy ({STORE_CONFIG.phone})
+                <span>📞</span> Call to Buy ({primaryPhone})
               </a>
+
               <a
                 href={getWhatsAppInquiryUrl(
                   `${product.brand} ${product.model}`,
@@ -283,7 +288,7 @@ function ProductDetailInner({ product, reviews, qa, similar }: Props) {
               <div>
                 <div className={styles.pickupTitle}>In-Store Pickup Available Today</div>
                 <div className={styles.pickupSubtitle}>
-                  Visit ARONA MOBILES Store · {STORE_CONFIG.address.line1}
+                  Visit {settings.store_name || 'ARONA MOBILES'} Store · {settings.address_line1 || 'Opp. Town Hall'}
                 </div>
               </div>
             </div>
@@ -298,10 +303,11 @@ function ProductDetailInner({ product, reviews, qa, similar }: Props) {
               </div>
               <div className={styles.pickupDetailItem}>
                 <span className={styles.pickupCheck}>✓</span>
-                <span>Store Hours: {STORE_CONFIG.hours.shortHours}</span>
+                <span>Store Hours: {settings.hours_weekdays || 'Mon–Sat: 10:00 AM – 8:30 PM'}</span>
               </div>
             </div>
           </div>
+
 
           {/* Highlights */}
           <div className={styles.highlights}>

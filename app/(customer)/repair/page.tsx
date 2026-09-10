@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { showToast } from '@/components/customer/Toast/Toast';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './page.module.css';
 
 const SERVICES = [
@@ -17,6 +18,7 @@ const SERVICES = [
 ];
 
 export default function RepairPage() {
+  const { settings, primaryPhone, primaryPhoneRaw, secondaryPhone, secondaryPhoneRaw } = useStoreSettings();
   const [selectedService, setSelectedService] = useState('');
   const [device, setDevice] = useState({ brand: '', model: '', issue: '' });
   const [slot, setSlot] = useState('');
@@ -58,23 +60,27 @@ export default function RepairPage() {
   }
 
   return (
-    <div className="container">
-      <div className={styles.page}>
-        <div className={styles.hero}>
-          <h1 className={styles.title}>📱 Repair & Mobile Care</h1>
-          <p className={styles.desc}>Expert repairs by certified technicians. Same-day service for most repairs. 3-month warranty on all work.</p>
+    <div>
+      <div className={styles.hero}>
+        <div className="container">
+          <h1 className={styles.title}>Expert Mobile Repair &amp; Service</h1>
+          <p className={styles.sub}>
+            Fast, reliable phone repairs with 100% genuine parts &amp; 3-month store warranty.
+          </p>
         </div>
+      </div>
 
+      <div className="container">
         <div className={styles.layout}>
           <div className={styles.left}>
-            {/* Service selection */}
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Select Service</h2>
+            <div className={styles.formCard}>
+              <h2 className={styles.sectionTitle}>1. Select Service Needed</h2>
               <div className={styles.serviceGrid}>
                 {SERVICES.map(s => (
                   <button
                     key={s.id}
-                    className={`${styles.serviceCard} ${selectedService === s.id ? styles.serviceCardActive : ''}`}
+                    type="button"
+                    className={`${styles.serviceBtn} ${selectedService === s.id ? styles.selected : ''}`}
                     onClick={() => setSelectedService(s.id)}
                   >
                     <span className={styles.serviceIcon}>{s.icon}</span>
@@ -83,47 +89,62 @@ export default function RepairPage() {
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Device info */}
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Your Device</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div className="form-group">
-                  <label className="form-label">Brand *</label>
-                  <input className="form-input" placeholder="e.g. Apple, Samsung" value={device.brand}
-                    onChange={e => setDevice(d => ({ ...d, brand: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Model *</label>
-                  <input className="form-input" placeholder="e.g. iPhone 13, S23" value={device.model}
-                    onChange={e => setDevice(d => ({ ...d, model: e.target.value }))} />
-                </div>
+              <h2 className={styles.sectionTitle} style={{ marginTop: 28 }}>2. Device Details</h2>
+              <div className="form-group">
+                <label className="form-label">Phone Brand *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Apple, Samsung, OnePlus"
+                  value={device.brand}
+                  onChange={e => setDevice(d => ({ ...d, brand: e.target.value }))}
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Describe the issue (optional)</label>
-                <textarea className="form-input" rows={3} placeholder="Any extra details..." value={device.issue}
-                  onChange={e => setDevice(d => ({ ...d, issue: e.target.value }))} />
+                <label className="form-label">Phone Model *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. iPhone 13, Galaxy S21"
+                  value={device.model}
+                  onChange={e => setDevice(d => ({ ...d, model: e.target.value }))}
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Preferred Date & Time (optional)</label>
-                <input className="form-input" type="datetime-local" value={slot}
-                  onChange={e => setSlot(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
+                <label className="form-label">Describe the Issue (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  placeholder="e.g. Screen is cracked but touch is working, battery drains fast..."
+                  value={device.issue}
+                  onChange={e => setDevice(d => ({ ...d, issue: e.target.value }))}
+                />
               </div>
+
+              <h2 className={styles.sectionTitle} style={{ marginTop: 28 }}>3. Preferred Time Slot</h2>
+              <div className="form-group">
+                <label className="form-label">Preferred Date &amp; Time</label>
+                <input
+                  className="form-input"
+                  type="datetime-local"
+                  value={slot}
+                  onChange={e => setSlot(e.target.value)}
+                />
+              </div>
+
               <button
-                id="book-repair-btn"
                 className="btn btn--primary btn--lg btn--full"
                 onClick={submit}
                 disabled={loading}
+                style={{ marginTop: 20 }}
               >
-                {loading ? 'Booking...' : '🔧 Book Repair'}
+                {loading ? 'Booking...' : '🔧 Book Repair Appointment'}
               </button>
             </div>
           </div>
 
           <div className={styles.right}>
             <div className={styles.infoCard}>
-              <h3>Why Arona Mobiles Repair?</h3>
+              <h3>Why Choose Us?</h3>
               <ul className={styles.bullets}>
                 <li>✅ Certified technicians</li>
                 <li>🛡️ 3-month repair warranty</li>
@@ -135,12 +156,16 @@ export default function RepairPage() {
             </div>
             <div className={styles.infoCard}>
               <h3>Service Hours</h3>
-              <p>Mon–Sat: 10:00 AM – 8:30 PM</p>
-              <p>Sunday: 11:00 AM – 6:00 PM</p>
+              <p>{settings.hours_weekdays || 'Mon–Sat: 10:00 AM – 8:30 PM'}</p>
+              <p>{settings.hours_sunday || 'Sunday: 11:00 AM – 6:00 PM'}</p>
               <p style={{ marginTop: 12, color: 'var(--color-accent)', fontWeight: 600 }}>
-                <a href="tel:+919787061617" style={{ color: 'inherit' }}>📞 +91 97870 61617</a>
-                <br />
-                <a href="tel:+919659458606" style={{ color: 'inherit' }}>📞 +91 96594 58606</a>
+                <a href={`tel:${primaryPhoneRaw}`} style={{ color: 'inherit' }}>📞 {primaryPhone}</a>
+                {secondaryPhoneRaw && (
+                  <>
+                    <br />
+                    <a href={`tel:${secondaryPhoneRaw}`} style={{ color: 'inherit' }}>📞 {secondaryPhone}</a>
+                  </>
+                )}
               </p>
             </div>
           </div>

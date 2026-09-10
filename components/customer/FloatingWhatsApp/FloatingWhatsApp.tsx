@@ -1,9 +1,10 @@
 'use client';
 
-import { getWhatsAppSupportUrl } from '@/lib/constants';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './FloatingWhatsApp.module.css';
 
 export default function FloatingWhatsApp() {
+  const { getWhatsAppSupportUrl, settings } = useStoreSettings();
   const whatsappUrl = getWhatsAppSupportUrl();
 
   return (
@@ -12,8 +13,8 @@ export default function FloatingWhatsApp() {
       target="_blank"
       rel="noopener noreferrer"
       className={styles.floatingBtn}
-      aria-label="Chat with ARONA MOBILES on WhatsApp"
-      title="Chat with ARONA MOBILES on WhatsApp"
+      aria-label={`Chat with ${settings.store_name || 'ARONA MOBILES'} on WhatsApp`}
+      title={`Chat with ${settings.store_name || 'ARONA MOBILES'} on WhatsApp`}
       id="floating-whatsapp-btn"
     >
       <span className={styles.icon}>💬</span>
@@ -21,3 +22,4 @@ export default function FloatingWhatsApp() {
     </a>
   );
 }
+

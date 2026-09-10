@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import type { Product } from '@/lib/types';
-import { STORE_CONFIG, getWhatsAppSupportUrl } from '@/lib/constants';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './Navbar.module.css';
+
 
 const CATEGORIES = [
   { label: 'Smartphones', href: '/shop?category=smartphones' },
@@ -28,6 +29,7 @@ const BRANDS = [
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { primaryPhone, primaryPhoneRaw, secondaryPhone, secondaryPhoneRaw, whatsappNumber, googleMapsUrl, getWhatsAppSupportUrl } = useStoreSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -148,16 +150,16 @@ export default function Navbar() {
           {/* Right actions: Call Store, Location & Owner Portal */}
           <div className={styles.navActions}>
             <a
-              href={`tel:${STORE_CONFIG.phonePrimaryRaw}`}
+              href={`tel:${primaryPhoneRaw}`}
               className={styles.callStoreBtn}
-              title={`Call Store: ${STORE_CONFIG.phonePrimary} / ${STORE_CONFIG.phoneSecondary}`}
+              title={`Call Store: ${primaryPhone} / ${secondaryPhone}`}
               id="nav-call-store-btn"
             >
               <span className={styles.callStoreIcon}>📞</span>
               <span className={styles.callStoreText}>Call Store</span>
             </a>
             <a
-              href={STORE_CONFIG.googleMapsUrl}
+              href={googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.locationBtn}
@@ -227,22 +229,24 @@ export default function Navbar() {
             <button onClick={() => setMobileMenuOpen(false)}>✕</button>
           </div>
           <div className={styles.mobileContactSection}>
-            <a href={`tel:${STORE_CONFIG.phonePrimaryRaw}`} className={styles.mobileCallBtn}>
-              📞 Call: {STORE_CONFIG.phonePrimary}
+            <a href={`tel:${primaryPhoneRaw}`} className={styles.mobileCallBtn}>
+              📞 Call: {primaryPhone}
             </a>
-            <a href={`tel:${STORE_CONFIG.phoneSecondaryRaw}`} className={styles.mobileCallBtn} style={{ background: '#15803d' }}>
-              📞 Alt: {STORE_CONFIG.phoneSecondary}
-            </a>
+            {secondaryPhoneRaw && (
+              <a href={`tel:${secondaryPhoneRaw}`} className={styles.mobileCallBtn} style={{ background: '#15803d' }}>
+                📞 Alt: {secondaryPhone}
+              </a>
+            )}
             <a
               href={getWhatsAppSupportUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.mobileWhatsappBtn}
             >
-              💬 Chat on WhatsApp (+91 97870 61617)
+              💬 Chat on WhatsApp (+{whatsappNumber})
             </a>
             <a
-              href={STORE_CONFIG.googleMapsUrl}
+              href={googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.mobileLocationBtn}
@@ -271,3 +275,4 @@ export default function Navbar() {
     </>
   );
 }
+

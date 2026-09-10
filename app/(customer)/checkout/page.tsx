@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CartProvider, { useCart } from '@/components/customer/CartProvider/CartProvider';
 import { showToast } from '@/components/customer/Toast/Toast';
-import { STORE_CONFIG } from '@/lib/constants';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './page.module.css';
 
 function formatPrice(p: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(p);
 }
+
 
 const PAYMENT_METHODS = [
   {
@@ -45,6 +46,7 @@ const PICKUP_SLOTS = [
 
 function CheckoutInner() {
   const { items, total, clearCart } = useCart();
+  const { settings } = useStoreSettings();
   const router = useRouter();
   const [step, setStep] = useState<'pickup' | 'payment' | 'review'>('pickup');
   const [customer, setCustomer] = useState({
@@ -58,6 +60,7 @@ function CheckoutInner() {
 
   const deliveryCharge = 0;
   const finalTotal = total;
+
 
   const handlePlaceOrder = async () => {
     if (!customer.name.trim() || !customer.phone.trim()) {
@@ -83,12 +86,13 @@ function CheckoutInner() {
           address: {
             name: customer.name,
             phone: customer.phone,
-            line1: STORE_CONFIG.address.line1,
+            line1: settings.address_line1 || 'ARONA MOBILES, Opp. Town Hall',
             line2: `Preferred Pickup: ${customer.pickupSchedule}`,
-            city: STORE_CONFIG.address.city,
-            state: STORE_CONFIG.address.state,
-            pincode: STORE_CONFIG.address.pincode,
+            city: settings.city || 'Bangalore',
+            state: settings.state || 'Karnataka',
+            pincode: settings.pincode || '560001',
           },
+
           pickup_schedule: customer.pickupSchedule,
           pickup_notes: customer.notes,
           payment_method: payment,
@@ -162,11 +166,12 @@ function CheckoutInner() {
                 <span style={{ fontSize: '1.4rem' }}>🏪</span>
                 <div>
                   <strong>Store Pickup Location:</strong>
-                  <div>{STORE_CONFIG.name} · {STORE_CONFIG.address.line1}, {STORE_CONFIG.address.line2}</div>
+                  <div>{settings.store_name || 'ARONA MOBILES'} · {settings.address_line1 || 'ARONA MOBILES, Opp. Town Hall'}, {settings.address_line2 || 'Main Commercial Road'}</div>
                   <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
-                    ⏰ Hours: {STORE_CONFIG.hours.weekdays} | 📞 {STORE_CONFIG.phone}
+                    ⏰ Hours: {settings.hours_weekdays || 'Mon–Sat: 10:00 AM – 8:30 PM'} | 📞 {settings.phone_primary}
                   </div>
                 </div>
+
               </div>
 
               <h2 className={styles.cardTitle} style={{ marginTop: 20 }}>👤 Customer &amp; Pickup Details</h2>
@@ -286,7 +291,7 @@ function CheckoutInner() {
                 <div className={styles.reviewLabel}>Pickup Schedule &amp; Store Location</div>
                 <div className={styles.reviewValue}>
                   ⏰ <strong>{customer.pickupSchedule}</strong><br />
-                  📍 {STORE_CONFIG.address.line1}, {STORE_CONFIG.address.line2}, {STORE_CONFIG.address.city}
+                  📍 {settings.address_line1 || 'ARONA MOBILES, Opp. Town Hall'}, {settings.address_line2 || 'Main Commercial Road'}, {settings.city || 'Bangalore'}
                 </div>
                 {customer.notes && (
                   <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: 4 }}>

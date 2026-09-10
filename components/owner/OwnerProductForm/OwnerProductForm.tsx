@@ -49,8 +49,15 @@ export default function OwnerProductForm({ mode, product }: Props) {
   const [brand, setBrand] = useState(product?.brand || '');
   const [model, setModel] = useState(product?.model || '');
   const [shortDesc, setShortDesc] = useState(product?.short_description || '');
+  const [description, setDescription] = useState(product?.description || '');
   const [condition, setCondition] = useState<'new' | 'pre-owned'>(product?.condition || 'new');
   const [grade, setGrade] = useState<'A' | 'B' | 'C' | ''>(product?.grade || '');
+
+  // Variant details
+  const [color, setColor] = useState(product?.variants?.[0]?.color || (product?.specs?.color as string) || '');
+  const [ram, setRam] = useState(product?.specs?.ram || '8 GB');
+  const [storage, setStorage] = useState<string>(product?.variants?.[0]?.storage || (product?.specs?.storage_built as string) || '256 GB');
+  const [offerDetails, setOfferDetails] = useState((product?.specs?.offer_details as string) || '');
 
   // Pricing
   const [price, setPrice] = useState(String(product?.price || ''));
@@ -68,6 +75,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
   const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? true);
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
   const [flashSaleEnds, setFlashSaleEnds] = useState(product?.flash_sale_ends_at ? product.flash_sale_ends_at.slice(0, 16) : '');
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -215,10 +223,30 @@ export default function OwnerProductForm({ mode, product }: Props) {
       const primaryImage = images.length > 0 ? images[0] : 'https://images.unsplash.com/photo-1598327105854-c8674faddf79?w=600';
       const allImages = images.length > 0 ? images : [primaryImage];
 
+      const payloadSpecs = {
+        ...specs,
+        ram: ram || specs.ram || '',
+        storage_built: storage || specs.storage_built || '',
+        color: color || '',
+        offer_details: offerDetails || '',
+      };
+
+      const payloadVariants = [
+        {
+          color: color || 'Default',
+          storage: storage || 'Standard',
+          price: Number(price),
+          discount_price: discountPrice ? Number(discountPrice) : undefined,
+          stock: Number(stock),
+          images: allImages,
+        },
+      ];
+
       const payload = {
         brand,
         model,
         short_description: shortDesc || null,
+        description: description || shortDesc || null,
         condition,
         grade: condition === 'pre-owned' ? (grade || null) : null,
         price: Number(price),
@@ -226,7 +254,8 @@ export default function OwnerProductForm({ mode, product }: Props) {
         stock: Number(stock),
         image_url: primaryImage,
         images: allImages,
-        specs,
+        specs: payloadSpecs,
+        variants: payloadVariants,
         is_featured: isFeatured,
         is_active: isActive,
         flash_sale_ends_at: flashSaleEnds ? new Date(flashSaleEnds).toISOString() : null,
@@ -289,7 +318,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
         <div className={styles.leftCol}>
           {/* Basic Info */}
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Basic Information</h2>
+            <h2 className={styles.sectionTitle}>Basic Information & Model</h2>
             <div className={styles.row}>
               <div className="form-group">
                 <label className="form-label">Brand *</label>
@@ -311,14 +340,55 @@ export default function OwnerProductForm({ mode, product }: Props) {
               </div>
             </div>
 
+            <div className={styles.row}>
+              <div className="form-group">
+                <label className="form-label">Color / Finish</label>
+                <input
+                  className="form-input"
+                  value={color}
+                  onChange={e => setColor(e.target.value)}
+                  placeholder="e.g. Natural Titanium / Titanium Gray / Onyx Black"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">RAM</label>
+                <input
+                  className="form-input"
+                  value={ram}
+                  onChange={e => setRam(e.target.value)}
+                  placeholder="e.g. 8 GB, 12 GB, 16 GB"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Storage</label>
+                <input
+                  className="form-input"
+                  value={storage}
+                  onChange={e => setStorage(e.target.value)}
+                  placeholder="e.g. 128 GB, 256 GB, 512 GB, 1 TB"
+                />
+              </div>
+            </div>
+
             <div className="form-group">
-              <label className="form-label">Short Description</label>
+              <label className="form-label">Short Description / Key Features</label>
               <textarea
                 className="form-input"
                 rows={2}
                 value={shortDesc}
                 onChange={e => setShortDesc(e.target.value)}
-                placeholder="Highlight key features (e.g. Titanium design, 200MP camera, 120Hz display)"
+                placeholder="Highlight key features (e.g. Grade A Pristine, 120Hz LTPO Display, 200MP Camera)"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Full Description & Store Warranty Details</label>
+              <textarea
+                className="form-input"
+                rows={3}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Detailed specifications, box contents, and store guarantee terms..."
               />
             </div>
 
@@ -354,7 +424,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
 
           {/* Pricing & Stock */}
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Pricing & Inventory</h2>
+            <h2 className={styles.sectionTitle}>Pricing, Stock & Offers</h2>
             <div className={styles.row3}>
               <div className="form-group">
                 <label className="form-label">MRP / Base Price (₹) *</label>
@@ -368,7 +438,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Sale Price (₹)</label>
+                <label className="form-label">Sale / Offer Price (₹)</label>
                 <input
                   className="form-input"
                   type="number"
@@ -390,12 +460,23 @@ export default function OwnerProductForm({ mode, product }: Props) {
                 />
               </div>
             </div>
+
+            <div className="form-group" style={{ marginTop: '10px' }}>
+              <label className="form-label">Offer / Deal Tag (optional)</label>
+              <input
+                className="form-input"
+                value={offerDetails}
+                onChange={e => setOfferDetails(e.target.value)}
+                placeholder="e.g. ₹3,000 Instant Discount on UPI | Free Tempered Glass + Case"
+              />
+            </div>
             {discountPrice && price && Number(discountPrice) < Number(price) && (
               <div className={styles.discountPreview}>
                 ✅ {Math.round(((Number(price) - Number(discountPrice)) / Number(price)) * 100)}% discount applied to customers
               </div>
             )}
           </div>
+
 
           {/* Specs */}
           <div className={styles.section}>

@@ -1,8 +1,9 @@
 import { Suspense } from 'react';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { Product, ShopFilters, SortOption } from '@/lib/types';
-import ProductCard from '@/components/customer/ProductCard/ProductCard';
+import RealtimeProductGrid from '@/components/customer/RealtimeProductGrid/RealtimeProductGrid';
 import FilterSidebar from '@/components/customer/FilterSidebar/FilterSidebar';
+
 import CartProvider from '@/components/customer/CartProvider/CartProvider';
 import SortSelect from '@/components/customer/SortSelect/SortSelect';
 import styles from './page.module.css';
@@ -129,11 +130,7 @@ export default async function ShopPage({ searchParams }: PageProps) {
                 <a href="/shop" className="btn btn--secondary">Clear Filters</a>
               </div>
             ) : (
-              <div className={styles.grid}>
-                {products.map(p => (
-                  <ProductCard key={p.id} product={p} />
-                ))}
-              </div>
+              <RealtimeProductGrid initialProducts={products} className={styles.grid} />
             )}
           </div>
         </div>
@@ -141,4 +138,5 @@ export default async function ShopPage({ searchParams }: PageProps) {
     </CartProvider>
   );
 }
+
 

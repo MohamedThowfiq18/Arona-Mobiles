@@ -3,8 +3,9 @@ import Navbar from '@/components/customer/Navbar/Navbar';
 import Footer from '@/components/customer/Footer/Footer';
 import RealtimeProvider from '@/components/customer/RealtimeProvider/RealtimeProvider';
 import ToastContainer from '@/components/customer/Toast/Toast';
-
 import FloatingWhatsApp from '@/components/customer/FloatingWhatsApp/FloatingWhatsApp';
+import { StoreSettingsProvider } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
+import { getStoreSettings } from '@/lib/settings';
 
 export const metadata: Metadata = {
   title: {
@@ -15,20 +16,25 @@ export const metadata: Metadata = {
     'Buy new & certified pre-owned smartphones, book repairs, or trade in your phone. Visit ARONA MOBILES store or contact via Call & WhatsApp.',
 };
 
-export default function CustomerLayout({ children }: { children: React.ReactNode }) {
+export default async function CustomerLayout({ children }: { children: React.ReactNode }) {
+  const initialSettings = await getStoreSettings();
+
   return (
-    <div className="site-wrapper" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Navbar />
-      <main style={{ flex: 1 }}>
-        {children}
-      </main>
-      <Footer />
-      {/* Persistent floating WhatsApp button */}
-      <FloatingWhatsApp />
-      {/* Supabase Realtime product-change toasts */}
-      <RealtimeProvider />
-      {/* Global toast container */}
-      <ToastContainer />
-    </div>
+    <StoreSettingsProvider initialSettings={initialSettings}>
+      <div className="site-wrapper" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <Navbar />
+        <main style={{ flex: 1 }}>
+          {children}
+        </main>
+        <Footer />
+        {/* Persistent floating WhatsApp button */}
+        <FloatingWhatsApp />
+        {/* Supabase Realtime product-change toasts */}
+        <RealtimeProvider />
+        {/* Global toast container */}
+        <ToastContainer />
+      </div>
+    </StoreSettingsProvider>
   );
 }
+

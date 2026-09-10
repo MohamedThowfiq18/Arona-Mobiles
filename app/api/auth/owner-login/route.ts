@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/otp';
 import { sendMSG91OTP } from '@/lib/sms';
 import { createOwnerSession } from '@/lib/auth';
 import { STORE_CONFIG } from '@/lib/constants';
+import { getStoreSettings } from '@/lib/settings';
 import {
   checkLoginRateLimit,
   recordFailedLogin,
@@ -56,8 +57,14 @@ export async function POST(request: NextRequest) {
       }, { status: 429 });
     }
 
-    // ── 3. Authorization Check (Pre-approved Owner Numbers) ──────────
-    const isAuthorizedPhone = STORE_CONFIG.authorizedOwnerPhones.includes(cleanPhone);
+    // ── 3. Authorization Check (Dynamic Cloud & Config Owner Numbers) ──
+    const storeSettings = await getStoreSettings();
+    const authorizedList = [
+      ...STORE_CONFIG.authorizedOwnerPhones,
+      ...(storeSettings.authorized_owner_phones || []),
+    ];
+    const isAuthorizedPhone = authorizedList.includes(cleanPhone);
+
 
     let owner: any = null;
 

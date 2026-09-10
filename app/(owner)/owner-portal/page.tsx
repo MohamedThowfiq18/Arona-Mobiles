@@ -2,6 +2,7 @@ import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/ser
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getAllProducts } from '@/lib/products';
+import { getStoreSettings } from '@/lib/settings';
 import styles from './page.module.css';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -11,7 +12,10 @@ function formatPrice(p: number) {
 }
 
 async function getDashboardStats() {
-  const localProducts = await getAllProducts(true);
+  const [localProducts, storeSettings] = await Promise.all([
+    getAllProducts(true),
+    getStoreSettings(),
+  ]);
   const localActiveProducts = localProducts.filter(p => p.is_active !== false);
   const localLowStock = localActiveProducts.filter(p => p.stock < 5 && p.stock > 0).slice(0, 10);
 
@@ -65,6 +69,7 @@ async function getDashboardStats() {
     totalReviews,
     activeCoupons,
     lowStockProducts,
+    storeSettings,
   };
 }
 
@@ -88,9 +93,14 @@ export default async function OwnerDashboardPage() {
           <h1 className={styles.title}>Store Management Dashboard</h1>
           <p className={styles.subtitle}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <Link href="/owner-portal/products/add" className="btn btn--primary" id="add-product-btn">
-          + Add New Phone
-        </Link>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Link href="/owner-portal/settings" className="btn btn--secondary" id="manage-phones-btn">
+            📞 Owner Contact Numbers
+          </Link>
+          <Link href="/owner-portal/products/add" className="btn btn--primary" id="add-product-btn">
+            + Add New Phone
+          </Link>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -133,28 +143,54 @@ export default async function OwnerDashboardPage() {
           )}
         </div>
 
-        {/* Quick Actions & Store Inquiries */}
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>⚡ Quick Operations</h2>
+        {/* Store Contact & Quick Operations */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          {/* Live Phone Numbers Card */}
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>📞 Active Store Contact Numbers</h2>
+              <Link href="/owner-portal/settings" className={styles.viewAll}>Edit Numbers →</Link>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-bg-section)', borderRadius: '6px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Primary Calling Line:</span>
+                <strong style={{ color: 'var(--color-text)' }}>{stats.storeSettings.phone_primary}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-bg-section)', borderRadius: '6px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Alternative Line:</span>
+                <strong style={{ color: 'var(--color-text)' }}>{stats.storeSettings.phone_secondary}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-bg-section)', borderRadius: '6px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>WhatsApp Business:</span>
+                <strong style={{ color: '#16a34a' }}>+{stats.storeSettings.whatsapp_number}</strong>
+              </div>
+            </div>
           </div>
-          <div className={styles.quickActions} style={{ marginTop: 0, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-            {[
-              { icon: '➕', label: 'Add New Phone',   href: '/owner-portal/products/add' },
-              { icon: '📱', label: 'Manage Phones',    href: '/owner-portal/products' },
-              { icon: '🔁', label: 'Trade-In Queue',   href: '/owner-portal/trade-in' },
-              { icon: '🔧', label: 'Repair Bookings',  href: '/owner-portal/repairs' },
-              { icon: '🎟️', label: 'Discount Coupons', href: '/owner-portal/coupons' },
-              { icon: '⭐', label: 'Customer Reviews', href: '/owner-portal/reviews' },
-            ].map(a => (
-              <Link key={a.href} href={a.href} className={styles.quickAction}>
-                <span className={styles.quickIcon}>{a.icon}</span>
-                <span>{a.label}</span>
-              </Link>
-            ))}
+
+          {/* Quick Operations */}
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>⚡ Quick Operations</h2>
+            </div>
+            <div className={styles.quickActions} style={{ marginTop: 0, gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+              {[
+                { icon: '➕', label: 'Add New Phone',   href: '/owner-portal/products/add' },
+                { icon: '📱', label: 'Manage Phones',    href: '/owner-portal/products' },
+                { icon: '📞', label: 'Phone Settings',   href: '/owner-portal/settings' },
+                { icon: '🔁', label: 'Trade-In Queue',   href: '/owner-portal/trade-in' },
+                { icon: '🔧', label: 'Repair Bookings',  href: '/owner-portal/repairs' },
+                { icon: '🎟️', label: 'Discount Coupons', href: '/owner-portal/coupons' },
+              ].map(a => (
+                <Link key={a.href} href={a.href} className={styles.quickAction}>
+                  <span className={styles.quickIcon}>{a.icon}</span>
+                  <span>{a.label}</span>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

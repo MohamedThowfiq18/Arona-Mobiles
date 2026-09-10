@@ -41,7 +41,10 @@ export interface ProductSpecs {
   display?: string;
   processor?: string;
   ram?: string;
+  storage_built?: string;
   battery?: string;
+  charging?: string;
+  camera?: string;
   rear_camera?: string;
   front_camera?: string;
   os?: string;
@@ -304,3 +307,29 @@ export interface ShopFilters {
 }
 
 export type SortOption = 'price_asc' | 'price_desc' | 'newest' | 'popularity' | 'rating';
+
+export interface StoreSettings {
+  id: string;
+  store_name: string;
+  tagline?: string;
+  phone_primary: string;
+  phone_primary_raw: string;
+  phone_secondary: string;
+  phone_secondary_raw: string;
+  whatsapp_number: string;
+  whatsapp_display: string;
+  authorized_owner_phones: string[];
+  email?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  landmark?: string;
+  hours_weekdays?: string;
+  hours_sunday?: string;
+  google_maps_url?: string;
+  announcement_bar?: string;
+  created_at?: string;
+  updated_at?: string;
+}

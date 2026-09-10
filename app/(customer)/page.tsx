@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import type { Product } from '@/lib/types';
-import ProductCard from '@/components/customer/ProductCard/ProductCard';
 import HeroBanner from '@/components/customer/HeroBanner/HeroBanner';
 import CartProvider from '@/components/customer/CartProvider/CartProvider';
+import RealtimeProductGrid from '@/components/customer/RealtimeProductGrid/RealtimeProductGrid';
 import { getFeaturedProducts, getPreOwnedProducts } from '@/lib/products';
 import styles from './page.module.css';
 
@@ -48,7 +48,7 @@ export default async function HomePage() {
               <a href="/shop" className={styles.viewAll}>View All →</a>
             </div>
             <Suspense fallback={<ProductGridSkeleton count={8} />}>
-              <ProductGridClient products={featured} />
+              <RealtimeProductGrid initialProducts={featured} filterFeaturedOnly className={styles.productGrid} />
             </Suspense>
           </div>
         </section>
@@ -68,14 +68,13 @@ export default async function HomePage() {
                 <a href="/certified-preowned" className="btn btn--secondary">Learn More →</a>
               </div>
               <div className={styles.preOwnedProducts}>
-                {preOwned.map(p => (
-                  <ProductCard key={p.id} product={p} />
-                ))}
+                <RealtimeProductGrid initialProducts={preOwned} filterCondition="pre-owned" limit={6} />
               </div>
             </div>
           </div>
         </section>
       )}
+
 
       {/* Why Arona Mobiles */}
       <section className="section">
@@ -103,16 +102,6 @@ export default async function HomePage() {
   );
 }
 
-function ProductGridClient({ products }: { products: Product[] }) {
-  return (
-    <div className={styles.productGrid}>
-      {products.map(p => (
-        <ProductCard key={p.id} product={p} />
-      ))}
-    </div>
-  );
-}
-
 function ProductGridSkeleton({ count }: { count: number }) {
   return (
     <div className={styles.productGrid}>
@@ -129,3 +118,4 @@ function ProductGridSkeleton({ count }: { count: number }) {
     </div>
   );
 }
+

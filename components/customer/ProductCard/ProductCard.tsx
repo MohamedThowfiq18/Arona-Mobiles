@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import type { Product } from '@/lib/types';
-import { STORE_CONFIG, getWhatsAppInquiryUrl } from '@/lib/constants';
+import { useStoreSettings } from '@/components/customer/StoreSettingsProvider/StoreSettingsProvider';
 import styles from './ProductCard.module.css';
 
 interface Props {
@@ -35,8 +35,10 @@ function StarRating({ rating, count }: { rating: number; count: number }) {
 }
 
 export default function ProductCard({ product, onAddToCart, onWishlistToggle, isWishlisted = false }: Props) {
+  const { primaryPhoneRaw, getWhatsAppInquiryUrl } = useStoreSettings();
   const [wishlisted, setWishlisted] = useState(isWishlisted);
   const [adding, setAdding] = useState(false);
+
 
   const displayPrice = product.discount_price ?? product.price;
   const hasDiscount = product.discount_price && product.discount_price < product.price;
@@ -156,7 +158,7 @@ export default function ProductCard({ product, onAddToCart, onWishlistToggle, is
           </button>
           <div className={styles.contactRow}>
             <a
-              href={`tel:${STORE_CONFIG.phoneRaw}`}
+              href={`tel:${primaryPhoneRaw}`}
               className={styles.callBtn}
               title={`Call store to buy ${product.brand} ${product.model}`}
               aria-label="Call to Buy"
@@ -174,6 +176,7 @@ export default function ProductCard({ product, onAddToCart, onWishlistToggle, is
               💬 WhatsApp
             </a>
           </div>
+
         </div>
       </div>
     </div>

@@ -1,0 +1,29 @@
+{
+  "id": "default",
+  "store_name": "ARONA MOBILES",
+  "tagline": "Your Trusted Mobile Phone Store",
+  "phone_primary": "+91 97870 61617",
+  "phone_primary_raw": "+919787061617",
+  "phone_secondary": "+91 96594 58606",
+  "phone_secondary_raw": "+919659458606",
+  "whatsapp_number": "919787061617",
+  "whatsapp_display": "+91 97870 61617",
+  "authorized_owner_phones": [
+    "9787061617",
+    "9659458606",
+    "9994235672"
+  ],
+  "email": "contact@aronamobiles.com",
+  "address_line1": "ARONA MOBILES, Bank Road",
+  "address_line2": "Near Urankapatti Tea Stall",
+  "city": "Melur",
+  "state": "Madurai",
+  "pincode": "625106",
+  "landmark": "Opposite Town Hall, near Central Junction",
+  "hours_weekdays": "Mon–Sat: 10:00 AM – 8:30 PM",
+  "hours_sunday": "Sunday: 11:00 AM – 6:00 PM",
+  "google_maps_url": "https://maps.app.goo.gl/BREhQPtfQ333NG248?g_st=ac",
+  "announcement_bar": "🎉 Big Exchange Offers & Same-Day In-Store Pickup Available!",
+  "created_at": "2026-09-10T06:18:38.043Z",
+  "updated_at": "2026-09-10T06:20:16.395Z"
+}

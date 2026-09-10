@@ -1,5 +1,49 @@
 [
   {
+    "id": "p1789019072634-rsz0g",
+    "brand_id": "b1000000-0000-0000-0000-000000000001",
+    "category_id": "c1000000-0000-0000-0000-000000000002",
+    "brand": "OnePlus",
+    "model": "nord",
+    "slug": "nord",
+    "condition": "pre-owned",
+    "grade": null,
+    "short_description": "OnePlus nord",
+    "description": "",
+    "specs": {
+      "display": "",
+      "processor": "",
+      "ram": "",
+      "storage_built": "",
+      "battery": "",
+      "charging": "",
+      "camera": "",
+      "os": "",
+      "5g": true
+    },
+    "variants": [],
+    "images": [
+      "https://images.unsplash.com/photo-1598327105854-c8674faddf79?w=600"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1598327105854-c8674faddf79?w=600",
+    "price": 145611,
+    "discount_price": 123451,
+    "stock": 1,
+    "sku": "ONEP-2635",
+    "is_featured": true,
+    "is_active": true,
+    "flash_sale_ends_at": null,
+    "tags": [
+      "smartphone",
+      "oneplus"
+    ],
+    "average_rating": 5,
+    "review_count": 1,
+    "sold_count": 0,
+    "created_at": "2026-09-10T05:44:32.634Z",
+    "updated_at": "2026-09-10T05:44:32.634Z"
+  },
+  {
     "id": "p1788976557297-9de0i",
     "brand_id": "b1000000-0000-0000-0000-000000000001",
     "category_id": "c1000000-0000-0000-0000-000000000001",

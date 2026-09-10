@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { Order, OrderStatus } from '@/lib/types';
-import { STORE_CONFIG } from '@/lib/constants';
+import { getStoreSettings } from '@/lib/settings';
 import type { Metadata } from 'next';
 import styles from './page.module.css';
 
@@ -27,7 +27,10 @@ function getStepIndex(status: OrderStatus): number {
 
 export default async function OrderTrackingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await getSupabaseServerClient();
+  const [supabase, settings] = await Promise.all([
+    getSupabaseServerClient(),
+    getStoreSettings(),
+  ]);
   const { data } = await supabase.from('orders').select('*').eq('id', id).single();
   const order = data as Order | null;
 
@@ -62,7 +65,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
                 : order.status.replace(/_/g, ' ').toUpperCase()}
             </span>
             <a
-              href={`tel:${STORE_CONFIG.phoneRaw}`}
+              href={`tel:${settings.phone_primary_raw}`}
               className="btn btn--secondary btn--sm"
               style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
             >
@@ -70,6 +73,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
             </a>
           </div>
         </div>
+
 
         {/* Store Confirmation Alert Banner */}
         <div
@@ -171,28 +175,31 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
             <div className={styles.card}>
               <h2 className={styles.cardTitle}>🏪 Store Pickup Location</h2>
               <div className={styles.address}>
-                <strong style={{ fontSize: '1rem', color: 'var(--color-text)' }}>{STORE_CONFIG.name}</strong><br />
-                {STORE_CONFIG.address.line1}<br />
-                {STORE_CONFIG.address.line2}, {STORE_CONFIG.address.city}, {STORE_CONFIG.address.state} - {STORE_CONFIG.address.pincode}<br />
-                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                  ({STORE_CONFIG.address.landmark})
-                </span>
+                <strong style={{ fontSize: '1rem', color: 'var(--color-text)' }}>{settings.store_name || 'ARONA MOBILES'}</strong><br />
+                {settings.address_line1 || 'ARONA MOBILES, Opp. Town Hall'}<br />
+                {settings.address_line2 || 'Main Commercial Road'}, {settings.city || 'Bangalore'}, {settings.state || 'Karnataka'} - {settings.pincode || '560001'}<br />
+                {settings.landmark && (
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    ({settings.landmark})
+                  </span>
+                )}
                 <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
-                  ⏰ <strong>Store Hours:</strong> {STORE_CONFIG.hours.weekdays}<br />
+
+                  ⏰ <strong>Store Hours:</strong> {settings.hours_weekdays || 'Mon–Sat: 10:00 AM – 8:30 PM'}<br />
                   👤 <strong>Customer:</strong> {order.address.name} (📞 {order.address.phone})
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                 <a
-                  href={`tel:${STORE_CONFIG.phoneRaw}`}
+                  href={`tel:${settings.phone_primary_raw}`}
                   className="btn btn--full"
                   style={{ background: '#16a34a', color: '#fff', fontWeight: 600 }}
                 >
-                  📞 Call Store ({STORE_CONFIG.phone})
+                  📞 Call Store ({settings.phone_primary})
                 </a>
                 <a
-                  href={`https://wa.me/${STORE_CONFIG.whatsappNumber}?text=${encodeURIComponent(
-                    `Hi ARONA MOBILES! I reserved Order #${order.order_number} (${order.items.map(x => x.model).join(', ')}). Could you please confirm pickup readiness?`
+                  href={`https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(
+                    `Hi ${settings.store_name || 'ARONA MOBILES'}! I reserved Order #${order.order_number} (${order.items.map(x => x.model).join(', ')}). Could you please confirm pickup readiness?`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -203,6 +210,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
                 </a>
               </div>
             </div>
+
 
             {/* Price Summary */}
             <div className={styles.card}>
