@@ -14,10 +14,51 @@ export interface OwnerSession {
   ownerId: string;
   phone: string;
   role: 'owner';
+  sessionId: string;
   version: number;
   iat: number;
   exp: number;
 }
+
+export interface ActiveDeviceSession {
+  id: string;
+  deviceName: string;
+  browser: string;
+  operatingSystem: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  ipAddress: string;
+  createdAt: string;
+  lastActiveAt: string;
+  isCurrent: boolean;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __arona_device_sessions_store: Map<string, {
+    id: string;
+    ownerId: string;
+    phone: string;
+    deviceName: string;
+    browser: string;
+    operatingSystem: string;
+    deviceType: 'desktop' | 'mobile' | 'tablet';
+    ipAddress: string;
+    userAgent: string;
+    createdAt: number;
+    lastActiveAt: number;
+    expiresAt: number;
+    isRevoked: boolean;
+    revokedAt?: number;
+  }> | undefined;
+}
+
+const deviceSessionsStore = globalThis.__arona_device_sessions_store ?? new Map();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.__arona_device_sessions_store = deviceSessionsStore;
+}
+
+import { getDeviceFingerprint, parseDeviceDetails, maskIPAddress } from '@/lib/security';
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -58,20 +99,112 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
 }
 
 /**
- * Create a session token for an authenticated owner (7-day validity)
+ * Generate a cryptographically secure token hash for session verification
  */
-export async function createOwnerSession(ownerId: string, phone: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
+function hashSessionToken(token: string): string {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token + SECRET_KEY);
+  // Synchronous representation
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    hash = (hash << 5) - hash + data[i];
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16) + textToBase64Url(token).slice(0, 16);
+}
+
+/**
+ * Create a new device session record in Supabase & memory, and return a signed JWT cookie token
+ */
+export async function createOwnerSession(
+  ownerId: string,
+  phone: string,
+  request?: NextRequest,
+  customSessionId?: string
+): Promise<string> {
+  const nowMs = Date.now();
+  const now = Math.floor(nowMs / 1000);
   const cleanPhone = phone.replace(/\D/g, '').slice(-10) || phone;
   const currentVersion = Math.max(
     getActiveSessionVersion(ownerId),
     getActiveSessionVersion(cleanPhone)
   );
 
+  const sessionId = customSessionId || crypto.randomUUID();
+  const expiresAtMs = nowMs + SECURITY_CONFIG.SESSION_EXPIRY_SECONDS * 1000;
+
+  // Extract non-invasive device information from Request if provided
+  let userAgent = 'Browser / Device';
+  let ip = '127.0.0.1';
+  let deviceInfo: {
+    browser: string;
+    operatingSystem: string;
+    deviceType: 'desktop' | 'mobile' | 'tablet';
+    deviceName: string;
+  } = {
+    browser: 'Browser',
+    operatingSystem: 'Desktop',
+    deviceType: 'desktop',
+    deviceName: 'Browser · Desktop',
+  };
+
+  if (request) {
+    const fp = getDeviceFingerprint(request);
+    userAgent = fp.userAgent;
+    ip = fp.ip;
+    deviceInfo = fp.deviceInfo;
+  }
+
+  const tokenHash = hashSessionToken(sessionId + cleanPhone + String(now));
+
+  // 1. Store in memory session store immediately
+  deviceSessionsStore.set(sessionId, {
+    id: sessionId,
+    ownerId,
+    phone: cleanPhone,
+    deviceName: deviceInfo.deviceName,
+    browser: deviceInfo.browser,
+    operatingSystem: deviceInfo.operatingSystem,
+    deviceType: deviceInfo.deviceType,
+    ipAddress: ip,
+    userAgent,
+    createdAt: nowMs,
+    lastActiveAt: nowMs,
+    expiresAt: expiresAtMs,
+    isRevoked: false,
+  });
+
+  // 2. Persist to Supabase owner_sessions table
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      await supabase.from('owner_sessions').insert({
+        id: sessionId,
+        owner_id: ownerId,
+        phone: cleanPhone,
+        session_token_hash: tokenHash,
+        device_name: deviceInfo.deviceName,
+        browser: deviceInfo.browser,
+        operating_system: deviceInfo.operatingSystem,
+        device_type: deviceInfo.deviceType,
+        ip_address: ip,
+        user_agent: userAgent,
+        created_at: new Date(nowMs).toISOString(),
+        last_active_at: new Date(nowMs).toISOString(),
+        expires_at: new Date(expiresAtMs).toISOString(),
+        is_revoked: false,
+      });
+    } catch (dbErr: any) {
+      console.warn('[Auth] Error saving session to Supabase owner_sessions:', dbErr?.message);
+    }
+  }
+
+  // 3. Create signed JWT session payload with embedded sessionId
   const payload: OwnerSession = {
     ownerId,
     phone: cleanPhone,
     role: 'owner',
+    sessionId,
     version: currentVersion,
     iat: now,
     exp: now + SECURITY_CONFIG.SESSION_EXPIRY_SECONDS,
@@ -89,7 +222,41 @@ export async function createOwnerSession(ownerId: string, phone: string): Promis
 }
 
 /**
- * Verify a session token and confirm signature, expiration, and session version
+ * Check if a specific sessionId has been revoked either in memory or in Supabase
+ */
+export async function isSessionRevoked(sessionId: string, phone?: string): Promise<boolean> {
+  const inMem = deviceSessionsStore.get(sessionId);
+  if (inMem) {
+    if (inMem.isRevoked || inMem.expiresAt < Date.now()) {
+      return true;
+    }
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from('owner_sessions')
+        .select('is_revoked, revoked_at, expires_at')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (!error && data) {
+        if (data.is_revoked || data.revoked_at || new Date(data.expires_at).getTime() < Date.now()) {
+          if (inMem) inMem.isRevoked = true;
+          return true;
+        }
+      }
+    } catch {
+      // Fall back to memory state
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Verify a session token and confirm signature, expiration, session version, AND revocation status
  */
 export async function verifyOwnerSession(token: string): Promise<OwnerSession | null> {
   try {
@@ -112,13 +279,22 @@ export async function verifyOwnerSession(token: string): Promise<OwnerSession | 
     // 2. Role check
     if (payload.role !== 'owner') return null;
 
-    // 3. Invalidation check (if password was changed and session version bumped)
+    // 3. Global version check (bumped on password reset)
     const activeVersionOwner = getActiveSessionVersion(payload.ownerId);
     const activeVersionPhone = payload.phone ? getActiveSessionVersion(payload.phone) : 1;
     const requiredActiveVersion = Math.max(activeVersionOwner, activeVersionPhone);
 
     if (payload.version && payload.version < requiredActiveVersion) {
       return null;
+    }
+
+    // 4. Device Revocation Check (if device was revoked by another device)
+    if (payload.sessionId) {
+      const revoked = await isSessionRevoked(payload.sessionId, payload.phone);
+      if (revoked) {
+        return null;
+      }
+      touchSessionActivity(payload.sessionId).catch(() => {});
     }
 
     return payload;
@@ -128,12 +304,223 @@ export async function verifyOwnerSession(token: string): Promise<OwnerSession | 
 }
 
 /**
+ * Throttled update of last_active_at (updates at most once every 2 minutes)
+ */
+export async function touchSessionActivity(sessionId: string): Promise<void> {
+  const nowMs = Date.now();
+  const inMem = deviceSessionsStore.get(sessionId);
+  if (inMem) {
+    if (nowMs - inMem.lastActiveAt < 120000) {
+      return;
+    }
+    inMem.lastActiveAt = nowMs;
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      await supabase
+        .from('owner_sessions')
+        .update({ last_active_at: new Date(nowMs).toISOString() })
+        .eq('id', sessionId)
+        .eq('is_revoked', false);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Retrieve all currently active logged-in device sessions for an owner
+ */
+export async function getOwnerActiveSessions(
+  phone: string,
+  currentSessionId?: string
+): Promise<ActiveDeviceSession[]> {
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10) || phone;
+  const now = new Date().toISOString();
+  const sessionsMap = new Map<string, ActiveDeviceSession>();
+
+  // 1. Check Supabase owner_sessions table first
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from('owner_sessions')
+        .select('*')
+        .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`)
+        .eq('is_revoked', false)
+        .gt('expires_at', now)
+        .order('last_active_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        data.forEach(s => {
+          sessionsMap.set(s.id, {
+            id: s.id,
+            deviceName: s.device_name || 'Browser · Device',
+            browser: s.browser || 'Browser',
+            operatingSystem: s.operating_system || 'OS',
+            deviceType: s.device_type || 'desktop',
+            ipAddress: maskIPAddress(s.ip_address),
+            createdAt: s.created_at,
+            lastActiveAt: s.last_active_at || s.created_at,
+            isCurrent: Boolean(currentSessionId && s.id === currentSessionId),
+          });
+        });
+      }
+    } catch (err: any) {
+      console.warn('[Auth] Error fetching sessions from Supabase:', err?.message);
+    }
+  }
+
+  // 2. Overlay memory sessions
+  const nowMs = Date.now();
+  deviceSessionsStore.forEach(s => {
+    if (s.phone === cleanPhone && !s.isRevoked && s.expiresAt > nowMs) {
+      if (!sessionsMap.has(s.id)) {
+        sessionsMap.set(s.id, {
+          id: s.id,
+          deviceName: s.deviceName,
+          browser: s.browser,
+          operatingSystem: s.operatingSystem,
+          deviceType: s.deviceType,
+          ipAddress: maskIPAddress(s.ipAddress),
+          createdAt: new Date(s.createdAt).toISOString(),
+          lastActiveAt: new Date(s.lastActiveAt).toISOString(),
+          isCurrent: Boolean(currentSessionId && s.id === currentSessionId),
+        });
+      }
+    }
+  });
+
+  const list = Array.from(sessionsMap.values());
+  
+  // Ensure current device appears first
+  list.sort((a, b) => {
+    if (a.isCurrent) return -1;
+    if (b.isCurrent) return 1;
+    return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
+  });
+
+  return list;
+}
+
+/**
+ * Revoke a single specific session by ID
+ */
+export async function revokeOwnerSessionById(
+  sessionId: string,
+  ownerPhone: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanPhone = ownerPhone.replace(/\D/g, '').slice(-10) || ownerPhone;
+  const now = new Date().toISOString();
+  const nowMs = Date.now();
+
+  // 1. Update memory store
+  const inMem = deviceSessionsStore.get(sessionId);
+  if (inMem) {
+    if (inMem.phone !== cleanPhone) {
+      return { success: false, error: 'Unauthorized to revoke this session.' };
+    }
+    inMem.isRevoked = true;
+    inMem.revokedAt = nowMs;
+    deviceSessionsStore.set(sessionId, inMem);
+  }
+
+  // 2. Update Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      const { error } = await supabase
+        .from('owner_sessions')
+        .update({
+          is_revoked: true,
+          revoked_at: now,
+        })
+        .eq('id', sessionId)
+        .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+
+      if (error) {
+        console.warn('[Auth] Supabase session revoke error:', error.message);
+      }
+    } catch (dbErr: any) {
+      console.error('[Auth] Database revoke error:', dbErr?.message);
+    }
+  }
+
+  return { success: true };
+}
+
+/**
+ * Revoke ALL active sessions for an owner EXCEPT the current session
+ */
+export async function revokeAllOtherOwnerSessions(
+  currentSessionId: string,
+  ownerPhone: string
+): Promise<{ success: boolean; count: number }> {
+  const cleanPhone = ownerPhone.replace(/\D/g, '').slice(-10) || ownerPhone;
+  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  let count = 0;
+
+  // 1. Update memory store
+  deviceSessionsStore.forEach(s => {
+    if (s.phone === cleanPhone && s.id !== currentSessionId && !s.isRevoked) {
+      s.isRevoked = true;
+      s.revokedAt = nowMs;
+      count++;
+    }
+  });
+
+  // 2. Update Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      await supabase
+        .from('owner_sessions')
+        .update({
+          is_revoked: true,
+          revoked_at: now,
+        })
+        .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`)
+        .neq('id', currentSessionId)
+        .eq('is_revoked', false);
+    } catch (dbErr: any) {
+      console.error('[Auth] Database revoke-all-others error:', dbErr?.message);
+    }
+  }
+
+  return { success: true, count };
+}
+
+/**
  * Invalidate all active sessions for a specific owner (e.g. on password reset)
  */
 export function invalidateOwnerSessions(ownerId: string, phone?: string): void {
   bumpSessionVersion(ownerId);
   if (phone) {
-    bumpSessionVersion(phone);
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+    bumpSessionVersion(cleanPhone);
+    const nowMs = Date.now();
+    deviceSessionsStore.forEach(s => {
+      if (s.phone === cleanPhone) {
+        s.isRevoked = true;
+        s.revokedAt = nowMs;
+      }
+    });
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdminClient();
+        supabase
+          .from('owner_sessions')
+          .update({ is_revoked: true, revoked_at: new Date().toISOString() })
+          .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`)
+          .then();
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 

@@ -426,6 +426,13 @@ function OwnerLoginForm() {
           </div>
         )}
 
+        {/* Remote Revocation Alert */}
+        {reason === 'revoked' && !error && !success && step === 'credentials' && (
+          <div className="alert alert--warning" role="alert" style={{ marginBottom: '16px' }}>
+            🔒 Your session was signed out from another device. Please sign in again.
+          </div>
+        )}
+
         {/* Success Confirmation */}
         {success && (
           <div className={styles.successBox} role="status" aria-live="polite">

@@ -54,6 +54,40 @@ CREATE POLICY "Allow server access on owners"
   WITH CHECK (TRUE);
 
 -- ============================================================
+-- OWNER SESSIONS TABLE (Multi-device management)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.owner_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_id TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  session_token_hash TEXT NOT NULL,
+  device_id TEXT,
+  device_name TEXT,
+  browser TEXT,
+  operating_system TEXT,
+  device_type TEXT DEFAULT 'desktop', -- 'desktop' | 'mobile' | 'tablet'
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  is_revoked BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_owner ON public.owner_sessions(owner_id);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_phone ON public.owner_sessions(phone);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_revoked ON public.owner_sessions(is_revoked);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_expires ON public.owner_sessions(expires_at);
+
+ALTER TABLE public.owner_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow server access on owner_sessions" ON public.owner_sessions;
+CREATE POLICY "Allow server access on owner_sessions"
+  ON public.owner_sessions FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+-- ============================================================
 -- OTP CODES
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.otp_codes (

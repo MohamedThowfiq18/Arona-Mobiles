@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clearSessionCookie, getOwnerSessionFromRequest } from '@/lib/auth';
+import { clearSessionCookie, getOwnerSessionFromRequest, revokeOwnerSessionById } from '@/lib/auth';
 import { getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -11,6 +11,9 @@ export async function POST(request: NextRequest) {
   const session = await getOwnerSessionFromRequest(request);
 
   if (session) {
+    if (session.sessionId) {
+      await revokeOwnerSessionById(session.sessionId, session.phone || session.ownerId);
+    }
     await logAuditEvent({
       ownerId: session.ownerId,
       action: 'LOGOUT',

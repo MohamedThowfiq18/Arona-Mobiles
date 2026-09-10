@@ -6,6 +6,7 @@
 -- Enable RLS on all tables
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.owners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.owner_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.otp_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;
@@ -166,6 +167,15 @@ CREATE POLICY "Users manage own recently viewed"
 DROP POLICY IF EXISTS "Allow server access on owners" ON public.owners;
 CREATE POLICY "Allow server access on owners"
   ON public.owners FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+-- ============================================================
+-- OWNER SESSIONS — secure access for server-side auth
+-- ============================================================
+DROP POLICY IF EXISTS "Allow server access on owner_sessions" ON public.owner_sessions;
+CREATE POLICY "Allow server access on owner_sessions"
+  ON public.owner_sessions FOR ALL
   USING (TRUE)
   WITH CHECK (TRUE);
 

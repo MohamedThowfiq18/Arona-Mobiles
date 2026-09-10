@@ -28,7 +28,38 @@ ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS session_version INT NOT NULL 
 ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE public.owners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
--- 3. CREATE / UPDATE PRODUCTS TABLE
+-- 3. CREATE / UPDATE OWNER SESSIONS TABLE
+CREATE TABLE IF NOT EXISTS public.owner_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_id TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  session_token_hash TEXT NOT NULL,
+  device_id TEXT,
+  device_name TEXT,
+  browser TEXT,
+  operating_system TEXT,
+  device_type TEXT DEFAULT 'desktop',
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  is_revoked BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_owner ON public.owner_sessions(owner_id);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_phone ON public.owner_sessions(phone);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_revoked ON public.owner_sessions(is_revoked);
+
+ALTER TABLE public.owner_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow server access on owner_sessions" ON public.owner_sessions;
+CREATE POLICY "Allow server access on owner_sessions"
+  ON public.owner_sessions FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+-- 4. CREATE / UPDATE PRODUCTS TABLE
 CREATE TABLE IF NOT EXISTS public.products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   brand TEXT NOT NULL,

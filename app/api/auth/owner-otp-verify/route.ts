@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create session token and set httpOnly cookie
-    const token = await createOwnerSession(resolvedOwnerId, cleanPhone);
+    // Create session token with device metadata and set httpOnly cookie
+    const token = await createOwnerSession(resolvedOwnerId, cleanPhone, request);
     await setSessionCookie(token);
 
     await logAuditEvent({

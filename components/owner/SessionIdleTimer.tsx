@@ -37,6 +37,53 @@ export default function SessionIdleTimer() {
     }
   }, [showWarning]);
 
+  // Periodic session validity check (detects remote revocation across devices)
+  useEffect(() => {
+    if (isPublicAuthPage) return;
+
+    let isMounted = true;
+
+    const checkSessionStatus = async () => {
+      try {
+        const res = await fetch('/api/auth/session-check', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        if (!isMounted) return;
+
+        if (res.status === 401 || !res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const reason = data?.reason === 'revoked' ? 'revoked' : 'idle';
+          handleLogout(reason);
+        }
+      } catch {
+        // Network failure or offline - do not logout immediately on transient network errors
+      }
+    };
+
+    // Run initial check on load and set up periodic 30-second interval
+    checkSessionStatus();
+    const intervalId = setInterval(checkSessionStatus, 30000);
+
+    // Also check immediately when the window/tab regains visibility or focus
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSessionStatus();
+      }
+    };
+
+    window.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', checkSessionStatus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      window.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', checkSessionStatus);
+    };
+  }, [isPublicAuthPage, handleLogout]);
+
   useEffect(() => {
     if (isPublicAuthPage) return;
 
@@ -49,7 +96,7 @@ export default function SessionIdleTimer() {
 
     events.forEach(e => window.addEventListener(e, onUserAction, { passive: true }));
 
-    // Periodic check interval
+    // Periodic idle check interval
     const interval = setInterval(() => {
       const idleTime = Date.now() - lastActivityRef.current;
 

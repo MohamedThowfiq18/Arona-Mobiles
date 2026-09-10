@@ -21,6 +21,8 @@ export interface AuditEventParams {
     | 'COUPON_CREATED'
     | 'COUPON_UPDATED'
     | 'STORE_SETTINGS_UPDATED'
+    | 'DEVICE_REVOKED'
+    | 'ALL_OTHER_DEVICES_REVOKED'
     | 'UNAUTHORIZED_ACCESS_ATTEMPT';
 
   targetTable?: string;

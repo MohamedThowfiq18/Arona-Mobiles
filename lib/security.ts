@@ -44,20 +44,100 @@ export function getClientIP(request: NextRequest): string {
   return '127.0.0.1';
 }
 
+export interface DeviceInfo {
+  browser: string;
+  operatingSystem: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  deviceName: string;
+}
+
+/**
+ * Parse non-invasive device information from User-Agent string
+ */
+export function parseDeviceDetails(userAgent: string): DeviceInfo {
+  const ua = userAgent || '';
+
+  // 1. Detect Operating System
+  let operatingSystem = 'Unknown OS';
+  if (/windows/i.test(ua)) operatingSystem = 'Windows';
+  else if (/iphone/i.test(ua)) operatingSystem = 'iOS';
+  else if (/ipad/i.test(ua)) operatingSystem = 'iPadOS';
+  else if (/android/i.test(ua)) operatingSystem = 'Android';
+  else if (/macintosh|mac os x/i.test(ua)) operatingSystem = 'macOS';
+  else if (/linux/i.test(ua)) operatingSystem = 'Linux';
+
+  // 2. Detect Browser
+  let browser = 'Browser';
+  if (/edg/i.test(ua)) browser = 'Edge';
+  else if (/opr|opera/i.test(ua)) browser = 'Opera';
+  else if (/samsungbrowser/i.test(ua)) browser = 'Samsung Internet';
+  else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+  else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+  else if (/safari/i.test(ua) && !/chrome|crios|android/i.test(ua)) browser = 'Safari';
+
+  // 3. Detect Device Type
+  let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
+  if (/ipad|tablet/i.test(ua)) {
+    deviceType = 'tablet';
+  } else if (/mobile|iphone|android/i.test(ua)) {
+    deviceType = 'mobile';
+  }
+
+  // 4. Formatted Display Name (e.g. "Chrome · Windows", "Safari · iPhone")
+  const deviceName = `${browser} · ${operatingSystem}`;
+
+  return {
+    browser,
+    operatingSystem,
+    deviceType,
+    deviceName,
+  };
+}
+
+/**
+ * Safely mask an IP address for non-sensitive UI display (e.g. 192.168.xxx.xxx)
+ */
+export function maskIPAddress(ip?: string): string {
+  if (!ip || ip === '127.0.0.1' || ip === '::1') return '127.0.xxx.xxx';
+  
+  // IPv4
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) {
+      return `${parts[0]}.${parts[1]}.xxx.xxx`;
+    }
+  }
+
+  // IPv6
+  if (ip.includes(':')) {
+    const parts = ip.split(':');
+    if (parts.length >= 2) {
+      return `${parts[0]}:${parts[1]}:xxx:xxx`;
+    }
+  }
+
+  return 'xxx.xxx.xxx.xxx';
+}
+
 /**
  * Get device fingerprint string from Request (IP + User-Agent)
  */
-export function getDeviceFingerprint(request: NextRequest): { ip: string; userAgent: string; deviceSummary: string } {
+export function getDeviceFingerprint(request: NextRequest): {
+  ip: string;
+  userAgent: string;
+  deviceSummary: string;
+  deviceInfo: DeviceInfo;
+} {
   const ip = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown Device';
-  
-  let deviceSummary = 'Desktop / Browser';
-  if (/mobile/i.test(userAgent)) deviceSummary = 'Mobile Device';
-  if (/tablet|ipad/i.test(userAgent)) deviceSummary = 'Tablet Device';
-  if (/android/i.test(userAgent)) deviceSummary = 'Android Phone';
-  if (/iphone/i.test(userAgent)) deviceSummary = 'iPhone';
+  const deviceInfo = parseDeviceDetails(userAgent);
 
-  return { ip, userAgent, deviceSummary };
+  return {
+    ip,
+    userAgent,
+    deviceSummary: deviceInfo.deviceName,
+    deviceInfo,
+  };
 }
 
 /**

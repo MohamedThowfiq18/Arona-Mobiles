@@ -3,7 +3,34 @@
 import { useState, useEffect } from 'react';
 import { showToast } from '@/components/customer/Toast/Toast';
 import type { StoreSettings } from '@/lib/types';
+import type { ActiveDeviceSession } from '@/lib/auth';
 import styles from './page.module.css';
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return 'Just now';
+  const time = new Date(dateStr).getTime();
+  const diffSec = Math.floor((Date.now() - time) / 1000);
+  if (diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} hr ago`;
+  if (diffSec < 172800) return 'Yesterday';
+  return `${Math.floor(diffSec / 86400)} days ago`;
+}
+
+function formatLoginDate(dateStr?: string): string {
+  if (!dateStr) return 'Today';
+  const d = new Date(dateStr);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) {
+    return 'Today';
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+  return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+}
 
 export default function OwnerSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -30,9 +57,107 @@ export default function OwnerSettingsPage() {
   const [mapsUrl, setMapsUrl] = useState('https://maps.app.goo.gl/BREhQPtfQ333NG248?g_st=ac');
   const [announcement, setAnnouncement] = useState('🎉 Big Exchange Offers & Same-Day In-Store Pickup Available!');
 
+  // Device Sessions State
+  const [devices, setDevices] = useState<ActiveDeviceSession[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingOthers, setRevokingOthers] = useState(false);
+
   useEffect(() => {
     fetchSettings();
+    fetchDevices();
   }, []);
+
+  const fetchDevices = async () => {
+    try {
+      setLoadingDevices(true);
+      const res = await fetch('/api/owner/sessions');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.sessions)) {
+          setDevices(data.sessions);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
+  const handleRevokeDevice = async (sessionId: string) => {
+    if (!sessionId || revokingId) return;
+    try {
+      setRevokingId(sessionId);
+      const res = await fetch('/api/owner/sessions/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast({
+          type: 'success',
+          title: 'Device Removed',
+          message: 'The selected device has been signed out successfully.',
+        });
+        await fetchDevices();
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Failed to remove device',
+          message: data.error || 'Please try again.',
+        });
+      }
+    } catch {
+      showToast({
+        type: 'error',
+        title: 'Network error',
+        message: 'Could not remove device. Please try again.',
+      });
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handleRevokeOthers = async () => {
+    if (revokingOthers) return;
+    const otherCount = devices.filter(d => !d.isCurrent).length;
+    if (otherCount === 0) {
+      showToast({ type: 'info', title: 'No other active devices to sign out.' });
+      return;
+    }
+
+    try {
+      setRevokingOthers(true);
+      const res = await fetch('/api/owner/sessions/revoke-others', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast({
+          type: 'success',
+          title: 'All Other Devices Signed Out',
+          message: `${data.count || otherCount} other device session(s) signed out successfully.`,
+        });
+        await fetchDevices();
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Failed to sign out other devices',
+          message: data.error || 'Please try again.',
+        });
+      }
+    } catch {
+      showToast({
+        type: 'error',
+        title: 'Network error',
+        message: 'Could not sign out other devices.',
+      });
+    } finally {
+      setRevokingOthers(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -161,9 +286,9 @@ export default function OwnerSettingsPage() {
       {/* Header */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>Store & Phone Management</h1>
+          <h1 className={styles.title}>Store & Security Settings</h1>
           <p className={styles.subtitle}>
-            Manage owner contact numbers, WhatsApp support, and authorized owner login accounts centrally in the cloud database.
+            Manage owner contact numbers, WhatsApp support, authorized logins, and active logged-in devices.
           </p>
         </div>
         <button
@@ -285,6 +410,102 @@ export default function OwnerSettingsPage() {
                 </span>
               ))}
             </div>
+          </div>
+
+          {/* Logged-in Devices Card */}
+          <div className={styles.card}>
+            <div className={styles.devicesHeader}>
+              <h2 className={styles.cardTitle} style={{ borderBottom: 'none', paddingBottom: 0, marginBottom: 0 }}>
+                <span>💻</span>
+                <span>Logged-in Devices</span>
+              </h2>
+              <button
+                type="button"
+                className={styles.refreshBtn}
+                onClick={fetchDevices}
+                disabled={loadingDevices}
+                title="Refresh device list"
+              >
+                🔄 Refresh
+              </button>
+            </div>
+            <p className={styles.cardDesc}>
+              Manage devices currently signed in to your Arona Mobiles Owner Portal.
+            </p>
+
+            {loadingDevices && devices.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                Loading active devices...
+              </div>
+            ) : (
+              <div className={styles.deviceList}>
+                {devices.map(device => (
+                  <div
+                    key={device.id}
+                    className={`${styles.deviceCard} ${device.isCurrent ? styles.deviceCardCurrent : ''}`}
+                  >
+                    <div className={styles.deviceMain}>
+                      <div className={styles.deviceIcon}>
+                        {device.deviceType === 'mobile' ? '📱' : device.deviceType === 'tablet' ? '📟' : '💻'}
+                      </div>
+                      <div className={styles.deviceInfo}>
+                        <div className={styles.deviceHeader}>
+                          <span className={styles.deviceName}>
+                            {device.browser} · {device.operatingSystem}
+                          </span>
+                          {device.isCurrent && (
+                            <span className={styles.currentBadge}>
+                              ✓ CURRENT DEVICE
+                            </span>
+                          )}
+                        </div>
+                        <div className={styles.deviceMeta}>
+                          <span>Last active: {formatRelativeTime(device.lastActiveAt)}</span>
+                          <span className={styles.deviceMetaDot}>•</span>
+                          <span>Logged in: {formatLoginDate(device.createdAt)}</span>
+                          {device.ipAddress && (
+                            <>
+                              <span className={styles.deviceMetaDot}>•</span>
+                              <span>IP: {device.ipAddress}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.deviceActions}>
+                      {device.isCurrent ? (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                          Current Device
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.removeBtn}
+                          onClick={() => handleRevokeDevice(device.id)}
+                          disabled={revokingId === device.id || revokingOthers}
+                        >
+                          {revokingId === device.id ? 'Removing...' : 'Remove Device'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {devices.filter(d => !d.isCurrent).length > 0 && (
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className={styles.revokeAllBtn}
+                  onClick={handleRevokeOthers}
+                  disabled={revokingOthers || loadingDevices}
+                >
+                  {revokingOthers ? 'Signing Out Other Devices...' : '🚫 Sign Out All Other Devices'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Store Address & Hours Card */}
