@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from '../login/page.module.css';
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
   const [msg91Ready, setMsg91Ready] = useState(false);
   const [msg91ReqId, setMsg91ReqId] = useState<string>('');
 
-  // Stable MSG91 Custom Web SDK Script Loader & Initializer (Reused from login)
+  // Stable MSG91 Custom Web SDK Script Loader & Initializer (Identical to login flow)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -77,11 +77,11 @@ export default function ForgotPasswordPage() {
       captchaRenderId: '',
 
       success: (data: any) => {
-        console.log('[MSG91 ForgotPassword] OTP sent:', data);
+        console.log('[MSG91 Forgot Password] OTP request successful');
       },
 
       failure: (err: any) => {
-        console.error('[MSG91 ForgotPassword] OTP failed:', err);
+        console.error('[MSG91 Forgot Password] OTP request failed');
       },
     };
 
@@ -89,22 +89,17 @@ export default function ForgotPasswordPage() {
       if (typeof window.initSendOTP === 'function') {
         try {
           window.initSendOTP(configuration);
-          console.log('[MSG91 ForgotPassword] Widget initialized');
+          console.log('[MSG91 Forgot Password] widget initialized');
           setMsg91Ready(true);
         } catch (e) {
-          console.error('[MSG91 ForgotPassword] Error initializing MSG91 widget:', e);
+          console.error('[MSG91 Forgot Password] Error initializing MSG91 widget:', e);
         }
       }
     };
 
-    // If already initialized and methods are present
-    if (
-      typeof window.sendOtp === 'function' &&
-      typeof window.verifyOtp === 'function'
-    ) {
-      console.log('[MSG91 ForgotPassword] Widget already initialized');
-      setMsg91Ready(true);
-      return;
+    // If initSendOTP is already available
+    if (typeof window.initSendOTP === 'function') {
+      initializeWidget();
     }
 
     const existingScript = document.querySelector(
@@ -116,7 +111,7 @@ export default function ForgotPasswordPage() {
         initializeWidget();
       } else {
         existingScript.addEventListener('load', () => {
-          console.log('[MSG91 ForgotPassword] Script loaded');
+          console.log('[MSG91 Forgot Password] script loaded');
           initializeWidget();
         });
       }
@@ -128,11 +123,11 @@ export default function ForgotPasswordPage() {
     script.type = 'text/javascript';
     script.async = true;
     script.onload = () => {
-      console.log('[MSG91 ForgotPassword] Script loaded');
+      console.log('[MSG91 Forgot Password] script loaded');
       initializeWidget();
     };
     script.onerror = () => {
-      console.error('[MSG91 ForgotPassword] Failed to load OTP provider script');
+      console.error('[MSG91 Forgot Password] Failed to load OTP provider script');
       setMsg91Ready(false);
     };
 
@@ -165,81 +160,100 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
 
-    const formattedMobile = `91${cleanPhone}`;
+    try {
+      // 1. Pre-validate authorized owner on server first
+      const checkRes = await fetch('/api/auth/owner-forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, checkOnly: true }),
+      });
+      const checkData = await checkRes.json().catch(() => ({}));
 
-    if (typeof window.sendOtp === 'function') {
-      console.log('[MSG91 ForgotPassword] Dispatching OTP via Web SDK');
+      if (!checkRes.ok || checkData.error) {
+        setError(checkData.error || 'Unable to reset password. Please check your registered mobile number.');
+        setLoading(false);
+        return;
+      }
 
-      window.sendOtp(
-        formattedMobile,
-        (data: any) => {
-          console.log('[MSG91 ForgotPassword] OTP send successful:', data);
-          const reqId = data?.reqId || data?.message || data?.data?.reqId || (typeof data === 'string' && data.length > 5 ? data : '');
-          if (reqId) {
-            setMsg91ReqId(String(reqId));
-          }
-          setSuccessMsg(`A 6-digit recovery code has been sent via SMS to your registered phone.`);
-          setStep(2);
-          setCooldown(30);
-          setLoading(false);
-        },
-        async (err: any) => {
-          console.warn('[MSG91 ForgotPassword] SDK sendOtp failed, attempting server fallback:', err);
-          // Fallback to server endpoint
-          try {
-            const res = await fetch('/api/auth/owner-forgot-password', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ phone: cleanPhone }),
-            });
-            const data = await res.json();
-            if (!res.ok || data.error) {
-              setError(data.error || 'Unable to send OTP. Please try again.');
-              setLoading(false);
-              return;
+      const formattedMobile = `91${cleanPhone}`;
+      console.log('[MSG91 Forgot Password] OTP requested');
+
+      // 2. Dispatch real SMS OTP via MSG91 Web SDK with server fallback
+      if (typeof window.sendOtp === 'function') {
+        console.log('[MSG91 Forgot Password] sendOtp available');
+        window.sendOtp(
+          formattedMobile,
+          (data: any) => {
+            console.log('[MSG91 Forgot Password] OTP request successful');
+            const reqId = data?.reqId || data?.message || data?.data?.reqId || (typeof data === 'string' && data.length > 5 ? data : '');
+            if (reqId) {
+              console.log('[MSG91 Forgot Password] reqId received');
+              setMsg91ReqId(String(reqId));
             }
-            if (data.reqId) {
-              setMsg91ReqId(String(data.reqId));
-            }
-            setSuccessMsg(data.message || 'A 6-digit recovery code has been sent via SMS.');
+            setSuccessMsg(`A 6-digit recovery code has been sent via SMS to your registered phone.`);
             setStep(2);
             setCooldown(30);
             setLoading(false);
-          } catch {
-            setError('Unable to send OTP. Please try again.');
-            setLoading(false);
+          },
+          async (err: any) => {
+            console.warn('[MSG91 Forgot Password] SDK sendOtp rejected, invoking server SMS dispatch');
+            // Server fallback dispatch
+            try {
+              const smsRes = await fetch('/api/auth/owner-forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: cleanPhone }),
+              });
+              const smsData = await smsRes.json().catch(() => ({}));
+              if (!smsRes.ok || smsData.error) {
+                setError(smsData.error || 'Unable to send OTP. Please try again.');
+                setLoading(false);
+                return;
+              }
+              if (smsData.reqId) {
+                console.log('[MSG91 Forgot Password] reqId received');
+                setMsg91ReqId(String(smsData.reqId));
+              }
+              setSuccessMsg(smsData.message || 'A 6-digit recovery code has been sent via SMS.');
+              setStep(2);
+              setCooldown(30);
+              setLoading(false);
+            } catch {
+              setError('Unable to send OTP. Please try again.');
+              setLoading(false);
+            }
           }
-        }
-      );
-    } else {
-      // Fallback via server API
-      try {
-        const res = await fetch('/api/auth/owner-forgot-password', {
+        );
+      } else {
+        // Direct server dispatch if Web SDK script is still loading on mobile browser
+        const smsRes = await fetch('/api/auth/owner-forgot-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: cleanPhone }),
         });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          setError(data.error || 'Unable to send OTP. Please try again.');
+        const smsData = await smsRes.json().catch(() => ({}));
+        if (!smsRes.ok || smsData.error) {
+          setError(smsData.error || 'Unable to send OTP. Please try again.');
           setLoading(false);
           return;
         }
-        if (data.reqId) {
-          setMsg91ReqId(String(data.reqId));
+        if (smsData.reqId) {
+          console.log('[MSG91 Forgot Password] reqId received');
+          setMsg91ReqId(String(smsData.reqId));
         }
-        setSuccessMsg(data.message || 'A 6-digit recovery code has been sent via SMS.');
+        setSuccessMsg(smsData.message || 'A 6-digit recovery code has been sent via SMS.');
         setStep(2);
         setCooldown(30);
         setLoading(false);
-      } catch {
-        setError('OTP service is still loading. Please try again.');
-        setLoading(false);
       }
+    } catch (err: any) {
+      console.error('[MSG91 Forgot Password] Error requesting OTP:', err);
+      setError('Connection error. Please check your network and try again.');
+      setLoading(false);
     }
   };
 
-  // Resend OTP handler via MSG91
+  // Resend OTP handler via MSG91 SDK with fallback
   const handleResend = () => {
     if (cooldown > 0 || resending || loading) return;
 
@@ -251,10 +265,13 @@ export default function ForgotPasswordPage() {
     const formattedMobile = `91${cleanPhone}`;
     const masked = `+91 XXXXXXX${cleanPhone.slice(-4)}`;
 
+    console.log('[MSG91 Forgot Password] OTP requested (resend)');
+
     const onResendSuccess = (data: any) => {
-      console.log('[MSG91 ForgotPassword] Resend successful:', data);
+      console.log('[MSG91 Forgot Password] OTP request successful');
       const newReqId = data?.reqId || data?.message || data?.data?.reqId || '';
       if (newReqId) {
+        console.log('[MSG91 Forgot Password] reqId received');
         setMsg91ReqId(String(newReqId));
       }
       setResendMsg(`New recovery code sent via SMS to ${masked}.`);
@@ -263,10 +280,31 @@ export default function ForgotPasswordPage() {
       setResending(false);
     };
 
-    const onResendFailure = (err: any) => {
-      console.error('[MSG91 ForgotPassword] Resend failed:', err);
-      setError(err?.message || 'Unable to send OTP. Please try again.');
-      setResending(false);
+    const onResendFailure = async (err: any) => {
+      console.warn('[MSG91 Forgot Password] SDK resend rejected, invoking server dispatch');
+      try {
+        const smsRes = await fetch('/api/auth/owner-forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone }),
+        });
+        const smsData = await smsRes.json().catch(() => ({}));
+        if (!smsRes.ok || smsData.error) {
+          setError(smsData.error || 'Unable to send OTP. Please try again.');
+        } else {
+          if (smsData.reqId) {
+            console.log('[MSG91 Forgot Password] reqId received');
+            setMsg91ReqId(String(smsData.reqId));
+          }
+          setResendMsg(`New recovery code sent via SMS to ${masked}.`);
+          setCooldown(30);
+          setOtp('');
+        }
+      } catch {
+        setError('Unable to send OTP. Please try again.');
+      } finally {
+        setResending(false);
+      }
     };
 
     if (typeof window.retryOtp === 'function' && msg91ReqId) {
@@ -280,8 +318,7 @@ export default function ForgotPasswordPage() {
     } else if (typeof window.sendOtp === 'function') {
       window.sendOtp(formattedMobile, onResendSuccess, onResendFailure);
     } else {
-      setError('OTP service is still loading. Please try again.');
-      setResending(false);
+      onResendFailure({ message: 'SDK unavailable' });
     }
   };
 
@@ -312,6 +349,7 @@ export default function ForgotPasswordPage() {
     }
 
     setLoading(true);
+    console.log('[MSG91 Forgot Password] verification requested');
 
     const executeServerPasswordReset = async (accessToken?: string) => {
       try {
@@ -330,11 +368,13 @@ export default function ForgotPasswordPage() {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok || data.error) {
+          console.error('[MSG91 Forgot Password] verification failed');
           setError(data.error || 'Unable to update password. Please try again.');
           setLoading(false);
           return;
         }
 
+        console.log('[MSG91 Forgot Password] verification successful');
         setSuccess(true);
         setSuccessMsg('✓ Password Reset Successful! Your password has been updated successfully.');
         setLoading(false);
@@ -344,7 +384,7 @@ export default function ForgotPasswordPage() {
           router.refresh();
         }, 1500);
       } catch (err: any) {
-        console.error('Password reset network error:', err);
+        console.error('[MSG91 Forgot Password] verification failed:', err);
         setError('Unable to update password. Please try again.');
         setLoading(false);
       }
@@ -352,24 +392,19 @@ export default function ForgotPasswordPage() {
 
     // Verify OTP using MSG91 Web SDK
     if (typeof window.verifyOtp === 'function' && msg91ReqId) {
-      console.log('[MSG91 ForgotPassword] Verifying OTP via Web SDK');
-
       window.verifyOtp(
         cleanOtp,
         async (data: any) => {
-          console.log('[MSG91 ForgotPassword] OTP verified by MSG91:', data);
           const accessToken = extractMsg91AccessToken(data) || `verified_${Date.now()}`;
           await executeServerPasswordReset(accessToken);
         },
         async (errObj: any) => {
-          console.warn('[MSG91 ForgotPassword] SDK verifyOtp rejected, checking with server:', errObj);
-          // Try server-side verification directly
+          console.warn('[MSG91 Forgot Password] SDK verifyOtp rejected, checking with server');
           await executeServerPasswordReset();
         },
         msg91ReqId
       );
     } else {
-      // Direct server-side verification
       await executeServerPasswordReset();
     }
   };

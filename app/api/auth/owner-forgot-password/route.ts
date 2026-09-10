@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/otp';
 import { sendMSG91OTP } from '@/lib/sms';
 import { STORE_CONFIG } from '@/lib/constants';
+import { getStoreSettings } from '@/lib/settings';
+import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { validatePhoneNumber, getClientIP, getDeviceFingerprint } from '@/lib/security';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -18,17 +20,64 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { phone } = body;
+    const { phone, checkOnly } = body;
 
     const phoneValidation = validatePhoneNumber(phone);
     if (!phoneValidation.valid) {
-      // Return same generic message to prevent enumeration
+      if (checkOnly) {
+        return NextResponse.json({ error: 'Please enter a valid 10-digit registered mobile number.' }, { status: 400 });
+      }
       return NextResponse.json(GENERIC_RECOVERY_RESPONSE);
     }
 
     const cleanPhone = phoneValidation.cleanPhone;
 
-    // 1. Rate Limiting Check
+    // 1. Check dynamic authorized owner phones list and database
+    const storeSettings = await getStoreSettings();
+    const authorizedList = [
+      ...STORE_CONFIG.authorizedOwnerPhones,
+      ...(storeSettings.authorized_owner_phones || []),
+    ];
+    let isAuthorizedPhone = authorizedList.includes(cleanPhone);
+
+    if (!isAuthorizedPhone && isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdminClient();
+        const { data } = await supabase.from('owners').select('phone').eq('phone', cleanPhone).maybeSingle();
+        if (data?.phone) {
+          isAuthorizedPhone = true;
+        }
+      } catch (dbErr) {
+        console.warn('Database lookup warning during owner check:', dbErr);
+      }
+    }
+
+    if (!isAuthorizedPhone) {
+      await logAuditEvent({
+        ownerId: `unauthorized-${cleanPhone}`,
+        action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+        ipAddress: ip,
+        userAgent,
+        note: 'Password recovery requested for non-authorized phone number',
+      });
+      if (checkOnly) {
+        return NextResponse.json({
+          error: 'Unable to reset password. Please check your registered mobile number.',
+        }, { status: 403 });
+      }
+      return NextResponse.json(GENERIC_RECOVERY_RESPONSE);
+    }
+
+    // If client is just checking authorization before triggering MSG91 Web SDK
+    if (checkOnly) {
+      return NextResponse.json({
+        valid: true,
+        cleanPhone,
+        formattedMobile: `91${cleanPhone}`,
+      });
+    }
+
+    // 2. Rate Limiting Check
     const rateCheck = checkRateLimit(cleanPhone);
     if (!rateCheck.allowed) {
       await logAuditEvent({
@@ -41,19 +90,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: `Too many requests. Please wait ${rateCheck.remainingMinutes} minute(s) before requesting another recovery code.`,
       }, { status: 429 });
-    }
-
-    // 2. Authorization check (only authorized owner phones receive real SMS OTP)
-    if (!STORE_CONFIG.authorizedOwnerPhones.includes(cleanPhone)) {
-      await logAuditEvent({
-        ownerId: `unauthorized-${cleanPhone}`,
-        action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
-        ipAddress: ip,
-        userAgent,
-        note: 'Password recovery requested for non-authorized phone number',
-      });
-      // Return uniform success response so attackers cannot discover authorized phone numbers
-      return NextResponse.json(GENERIC_RECOVERY_RESPONSE);
     }
 
     await logAuditEvent({
