@@ -10,17 +10,26 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 2. CREATE / UPDATE PRODUCTS TABLE
 CREATE TABLE IF NOT EXISTS public.products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   brand TEXT NOT NULL,
   model TEXT NOT NULL,
+  variant TEXT,
+  ram TEXT,
+  storage TEXT,
+  color TEXT,
   slug TEXT,
   condition TEXT NOT NULL DEFAULT 'new', -- 'new' | 'pre-owned'
   grade TEXT,                           -- 'A' | 'B' | 'C' (for pre-owned)
   short_description TEXT,
   description TEXT,
   price NUMERIC NOT NULL,
+  original_price NUMERIC,
   discount_price NUMERIC,
   stock INT DEFAULT 0,
+  offer TEXT,
+  available BOOLEAN DEFAULT TRUE,
+  featured BOOLEAN DEFAULT FALSE,
+  published BOOLEAN DEFAULT TRUE,
   specs JSONB DEFAULT '{}'::JSONB,
   image_url TEXT,
   images TEXT[] DEFAULT '{}',
@@ -37,7 +46,16 @@ CREATE TABLE IF NOT EXISTS public.products (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure image_url column exists if table already existed
+-- Ensure all columns exist if table already existed
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variant TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS ram TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS storage TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS color TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS offer TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS available BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS slug TEXT;
@@ -48,6 +66,7 @@ ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT T
 CREATE INDEX IF NOT EXISTS idx_products_brand ON public.products(brand);
 CREATE INDEX IF NOT EXISTS idx_products_condition ON public.products(condition);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON public.products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_published ON public.products(published);
 CREATE INDEX IF NOT EXISTS idx_products_price ON public.products(price);
 
 -- 3. ENABLE REALTIME ON PRODUCTS TABLE

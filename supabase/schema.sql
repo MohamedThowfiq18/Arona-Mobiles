@@ -81,11 +81,15 @@ CREATE TABLE IF NOT EXISTS public.categories (
 -- PRODUCTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.products (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   brand_id UUID REFERENCES public.brands(id) ON DELETE SET NULL,
   category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   brand TEXT NOT NULL,
   model TEXT NOT NULL,
+  variant TEXT,
+  ram TEXT,
+  storage TEXT,
+  color TEXT,
   slug TEXT NOT NULL UNIQUE,
   condition TEXT NOT NULL DEFAULT 'new' CHECK (condition IN ('new', 'pre-owned')),
   grade TEXT CHECK (grade IN ('A', 'B', 'C')),          -- for pre-owned
@@ -93,28 +97,77 @@ CREATE TABLE IF NOT EXISTS public.products (
   description TEXT,
   specs JSONB DEFAULT '{}'::JSONB,                       -- {ram, storage, battery, camera, ...}
   variants JSONB DEFAULT '[]'::JSONB,                    -- [{color, storage, price, stock, images[]}]
+  image_url TEXT,
   images TEXT[] DEFAULT '{}',                            -- primary images
   price NUMERIC(10,2) NOT NULL,
+  original_price NUMERIC(10,2),
   discount_price NUMERIC(10,2),
   stock INT NOT NULL DEFAULT 0,
+  offer TEXT,
+  available BOOLEAN DEFAULT TRUE,
+  featured BOOLEAN DEFAULT FALSE,
+  published BOOLEAN DEFAULT TRUE,
   sku TEXT UNIQUE,
   is_featured BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   flash_sale_ends_at TIMESTAMPTZ,
   inspection_report JSONB DEFAULT '{}'::JSONB,           -- for pre-owned
   tags TEXT[] DEFAULT '{}',
-  average_rating NUMERIC(3,2) DEFAULT 0,
-  review_count INT DEFAULT 0,
+  average_rating NUMERIC(3,2) DEFAULT 5.0,
+  review_count INT DEFAULT 1,
   sold_count INT DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Ensure all columns exist if table already exists
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variant TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS ram TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS storage TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS color TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2);
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS offer TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS available BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT TRUE;
+
 CREATE INDEX IF NOT EXISTS idx_products_brand ON public.products(brand);
 CREATE INDEX IF NOT EXISTS idx_products_condition ON public.products(condition);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON public.products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_published ON public.products(published);
 CREATE INDEX IF NOT EXISTS idx_products_is_featured ON public.products(is_featured);
 CREATE INDEX IF NOT EXISTS idx_products_price ON public.products(price);
+
+-- ============================================================
+-- STORE SETTINGS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.store_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  store_name TEXT NOT NULL DEFAULT 'ARONA MOBILES',
+  tagline TEXT DEFAULT 'Your Trusted Mobile Phone Store',
+  phone_primary TEXT NOT NULL DEFAULT '+91 97870 61617',
+  phone_primary_raw TEXT NOT NULL DEFAULT '+919787061617',
+  phone_secondary TEXT NOT NULL DEFAULT '+91 96594 58606',
+  phone_secondary_raw TEXT NOT NULL DEFAULT '+919659458606',
+  whatsapp_number TEXT NOT NULL DEFAULT '919787061617',
+  whatsapp_display TEXT NOT NULL DEFAULT '+91 97870 61617',
+  authorized_owner_phones TEXT[] DEFAULT ARRAY['9787061617', '9659458606', '9994235672'],
+  email TEXT DEFAULT 'contact@aronamobiles.com',
+  address_line1 TEXT DEFAULT 'ARONA MOBILES, Opp. Town Hall',
+  address_line2 TEXT DEFAULT 'Main Commercial Road',
+  city TEXT DEFAULT 'Bangalore',
+  state TEXT DEFAULT 'Karnataka',
+  pincode TEXT DEFAULT '560001',
+  landmark TEXT DEFAULT 'Opposite Town Hall, near Central Junction',
+  hours_weekdays TEXT DEFAULT 'Mon–Sat: 10:00 AM – 8:30 PM',
+  hours_sunday TEXT DEFAULT 'Sunday: 11:00 AM – 6:00 PM',
+  google_maps_url TEXT DEFAULT 'https://maps.app.goo.gl/BREhQPtfQ333NG248?g_st=ac',
+  announcement_bar TEXT DEFAULT '🎉 Big Exchange Offers & Same-Day In-Store Pickup Available!',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ============================================================
 -- ORDERS

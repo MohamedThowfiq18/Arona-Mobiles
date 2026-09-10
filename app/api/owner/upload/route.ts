@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { requireOwnerSession } from '@/lib/auth';
+import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No files uploaded' }, { status: 400 });
     }
 
-    // Ensure uploads directory exists
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    }
-
     const uploadedUrls: string[] = [];
+    const supabaseReady = isSupabaseConfigured();
+    const supabase = supabaseReady ? getSupabaseAdminClient() : null;
 
     for (const file of files) {
       // 1. Validate file size (max 5MB)
@@ -40,7 +38,8 @@ export async function POST(request: NextRequest) {
       }
 
       // 2. Validate MIME type
-      if (!ALLOWED_MIME_TYPES.includes(file.type.toLowerCase())) {
+      const mimeType = file.type.toLowerCase();
+      if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
         return NextResponse.json(
           { error: `Unsupported image format. Allowed formats: JPG, PNG, WEBP, GIF, AVIF.` },
           { status: 400 }
@@ -56,13 +55,55 @@ export async function POST(request: NextRequest) {
         ext = '.jpg';
       }
 
-      // 4. Generate random safe filename without path traversal risk
       const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const safeFilename = `phone-${uniqueSuffix}${ext}`;
-      const filePath = path.join(UPLOADS_DIR, safeFilename);
+      const storagePath = `phones/${safeFilename}`;
 
-      fs.writeFileSync(filePath, buffer);
-      uploadedUrls.push(`/uploads/products/${safeFilename}`);
+      let publicUrl: string | null = null;
+
+      // 4. Primary: Upload to Supabase Storage bucket 'product-images'
+      if (supabase) {
+        try {
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(storagePath, buffer, {
+              contentType: mimeType,
+              upsert: true,
+              cacheControl: '31536000',
+            });
+
+          if (!uploadError && uploadData) {
+            const { data: urlData } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(uploadData.path);
+            if (urlData?.publicUrl) {
+              publicUrl = urlData.publicUrl;
+            }
+          } else if (uploadError) {
+            console.warn('Supabase storage upload error:', uploadError);
+          }
+        } catch (sbErr) {
+          console.warn('Supabase storage upload exception:', sbErr);
+        }
+      }
+
+      // 5. Local filesystem fallback (development / offline)
+      if (!publicUrl) {
+        try {
+          if (!fs.existsSync(UPLOADS_DIR)) {
+            fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+          }
+          const filePath = path.join(UPLOADS_DIR, safeFilename);
+          fs.writeFileSync(filePath, buffer);
+          publicUrl = `/uploads/products/${safeFilename}`;
+        } catch (fsErr) {
+          console.warn('Local filesystem fallback skipped:', fsErr);
+        }
+      }
+
+      if (publicUrl) {
+        uploadedUrls.push(publicUrl);
+      }
     }
 
     if (uploadedUrls.length === 0) {

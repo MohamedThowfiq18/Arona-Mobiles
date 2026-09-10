@@ -43,18 +43,24 @@ export default function RealtimeProductGrid({
   }, []);
 
   useEffect(() => {
-    // Listen for tab focus to refresh stock immediately
+    // Listen for tab focus and online reconnect to refresh stock immediately
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         refreshProducts();
       }
     };
+    const handleOnline = () => {
+      refreshProducts();
+    };
+
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', refreshProducts);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', refreshProducts);
+      window.removeEventListener('online', handleOnline);
     };
   }, [refreshProducts]);
 
@@ -73,19 +79,21 @@ export default function RealtimeProductGrid({
 
             if (eventType === 'INSERT') {
               const newP = payload.new as Product;
-              if (newP.is_active !== false) {
+              const isVisible = newP.is_active !== false && newP.published !== false;
+              if (isVisible) {
                 setProducts(prev => {
-                  if (prev.some(p => p.id === newP.id)) return prev;
+                  if (prev.some(p => String(p.id) === String(newP.id))) return prev;
                   return [newP, ...prev];
                 });
               }
             } else if (eventType === 'UPDATE') {
               const updatedP = payload.new as Product;
+              const isVisible = updatedP.is_active !== false && updatedP.published !== false;
               setProducts(prev => {
-                if (updatedP.is_active === false) {
-                  return prev.filter(p => p.id !== updatedP.id);
+                if (!isVisible) {
+                  return prev.filter(p => String(p.id) !== String(updatedP.id));
                 }
-                const index = prev.findIndex(p => p.id === updatedP.id);
+                const index = prev.findIndex(p => String(p.id) === String(updatedP.id));
                 if (index !== -1) {
                   const copy = [...prev];
                   copy[index] = { ...copy[index], ...updatedP };
@@ -96,7 +104,7 @@ export default function RealtimeProductGrid({
             } else if (eventType === 'DELETE') {
               const deletedId = payload.old?.id;
               if (deletedId) {
-                setProducts(prev => prev.filter(p => p.id !== deletedId));
+                setProducts(prev => prev.filter(p => String(p.id) !== String(deletedId)));
               }
             }
           }

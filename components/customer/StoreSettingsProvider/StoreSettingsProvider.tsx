@@ -60,33 +60,54 @@ export function StoreSettingsProvider({
   useEffect(() => {
     fetchLatestSettings();
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLatestSettings();
+      }
+    };
+    const handleOnline = () => {
+      fetchLatestSettings();
+    };
+
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', fetchLatestSettings);
+    window.addEventListener('online', handleOnline);
+
     // Setup Supabase Realtime listener for live database updates
-    if (!isSupabaseConfigured()) return;
+    let channel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
 
-    try {
-      const supabase = getSupabaseClient();
-      const channel = supabase
-        .channel('store-settings-live')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'store_settings' },
-          (payload: any) => {
-            if (payload.new) {
-              setSettings(prev => ({
-                ...prev,
-                ...payload.new,
-              }));
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseClient();
+        channel = supabase
+          .channel('store-settings-live')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'store_settings' },
+            (payload: any) => {
+              if (payload.new) {
+                setSettings(prev => ({
+                  ...prev,
+                  ...payload.new,
+                }));
+              }
             }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } catch (err) {
-      console.warn('Realtime store settings subscription failed:', err);
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime store settings subscription failed:', err);
+      }
     }
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', fetchLatestSettings);
+      window.removeEventListener('online', handleOnline);
+      if (channel) {
+        const supabase = getSupabaseClient();
+        supabase.removeChannel(channel);
+      }
+    };
   }, []);
 
   const getWhatsAppInquiryUrl = (productName?: string, price?: number, variant?: string): string => {

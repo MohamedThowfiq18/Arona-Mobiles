@@ -80,6 +80,10 @@ export interface Product {
   category_id?: string;
   brand: string;
   model: string;
+  variant?: string;
+  ram?: string;
+  storage?: string;
+  color?: string;
   slug: string;
   condition: Condition;
   grade?: Grade;
@@ -90,8 +94,13 @@ export interface Product {
   images: string[];
   image_url?: string;
   price: number;
+  original_price?: number;
   discount_price?: number;
   stock: number;
+  offer?: string;
+  available?: boolean;
+  featured?: boolean;
+  published?: boolean;
   sku?: string;
   is_featured: boolean;
   is_active: boolean;

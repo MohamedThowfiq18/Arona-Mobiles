@@ -245,35 +245,32 @@ export default function OwnerProductForm({ mode, product }: Props) {
       const payload = {
         brand,
         model,
+        variant: color || storage ? `${color} ${storage}`.trim() : 'Standard',
+        ram: ram || specs.ram || '',
+        storage: storage || specs.storage_built || '',
+        color: color || '',
+        offer: offerDetails || '',
         short_description: shortDesc || null,
         description: description || shortDesc || null,
         condition,
         grade: condition === 'pre-owned' ? (grade || null) : null,
         price: Number(price),
+        original_price: discountPrice ? Number(price) : undefined,
         discount_price: discountPrice ? Number(discountPrice) : null,
         stock: Number(stock),
+        available: Number(stock) > 0 && isActive,
         image_url: primaryImage,
         images: allImages,
         specs: payloadSpecs,
         variants: payloadVariants,
         is_featured: isFeatured,
+        featured: isFeatured,
         is_active: isActive,
+        published: isActive,
         flash_sale_ends_at: flashSaleEnds ? new Date(flashSaleEnds).toISOString() : null,
       };
 
-      // 1. Direct Supabase write
-      try {
-        const supabase = getSupabaseClient();
-        if (mode === 'add') {
-          await supabase.from('products').insert(payload);
-        } else if (product?.id) {
-          await supabase.from('products').update(payload).eq('id', product.id);
-        }
-      } catch (sbErr) {
-        console.warn('Direct client Supabase write failed:', sbErr);
-      }
-
-      // 2. Server API write
+      // Server API write (authoritative Supabase write with owner auth & audit)
       const url = mode === 'add' ? '/api/owner/products' : `/api/owner/products/${product!.id}`;
       const res = await fetch(url, {
         method: mode === 'add' ? 'POST' : 'PUT',
@@ -289,7 +286,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
       showToast({
         type: 'success',
         title: mode === 'add' ? 'Phone added successfully!' : 'Phone updated!',
-        message: 'It is now live across the customer store and owner portal.',
+        message: 'Saved to Supabase. Live across customer store and owner portal.',
       });
 
       router.push('/owner-portal/products');

@@ -51,6 +51,15 @@ export async function PUT(
     const updates: Record<string, any> = { ...body };
     if (body.brand) updates.brand = sanitizeString(body.brand, 50);
     if (body.model) updates.model = sanitizeString(body.model, 100);
+    if (body.variant !== undefined) updates.variant = sanitizeString(body.variant, 100);
+    if (body.ram !== undefined) updates.ram = sanitizeString(body.ram, 50);
+    if (body.storage !== undefined) updates.storage = sanitizeString(body.storage, 50);
+    if (body.color !== undefined) updates.color = sanitizeString(body.color, 50);
+    if (body.offer !== undefined) updates.offer = sanitizeString(body.offer, 200);
+    if (body.short_description !== undefined) updates.short_description = sanitizeString(body.short_description, 500);
+    if (body.description !== undefined) updates.description = sanitizeString(body.description, 2000);
+    if (body.original_price !== undefined) updates.original_price = Number(body.original_price);
+    if (body.discount_price !== undefined) updates.discount_price = Number(body.discount_price);
     if (body.price !== undefined) {
       const pCheck = validatePositiveNumber(body.price, 1);
       if (!pCheck.valid) {
