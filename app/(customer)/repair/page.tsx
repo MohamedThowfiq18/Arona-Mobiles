@@ -38,6 +38,19 @@ export default function RepairPage() {
   const [slot, setSlot] = useState('');
   const [submittedData, setSubmittedData] = useState<BookingSuccessData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyBookingId = (id: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(id).then(() => {
+        setCopied(true);
+        showToast({ type: 'success', title: 'Booking ID copied!', message: 'You can use it anytime to track your repair.' });
+        setTimeout(() => setCopied(false), 2500);
+      }).catch(() => {
+        showToast({ type: 'info', title: 'Booking ID', message: id });
+      });
+    }
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -142,9 +155,22 @@ export default function RepairPage() {
         </p>
 
         <div className={styles.confirmationCard}>
-          <div className={styles.confirmRow}>
-            <span className={styles.confirmLabel}>Booking ID</span>
-            <span className={styles.bookingIdBadge}>{submittedData.id}</span>
+          <div className={styles.confirmRow} style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <span className={styles.confirmLabel}>Your Booking ID</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span className={styles.bookingIdBadge}>{submittedData.id}</span>
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => handleCopyBookingId(submittedData.id)}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+              >
+                {copied ? '✓ Copied!' : '📋 Copy Booking ID'}
+              </button>
+            </div>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'left', marginTop: '-4px', marginBottom: '8px' }}>
+            💡 Save this Booking ID to track your repair.
           </div>
           <div className={styles.confirmRow}>
             <span className={styles.confirmLabel}>Customer Name</span>
