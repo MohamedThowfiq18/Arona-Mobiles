@@ -442,3 +442,85 @@ CREATE OR REPLACE TRIGGER trg_tradein_updated_at
 
 CREATE OR REPLACE TRIGGER trg_repair_updated_at
   BEFORE UPDATE ON public.repair_bookings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ============================================================
+-- ACCESSORY CATEGORIES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.accessory_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  icon TEXT,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- ACCESSORIES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.accessories (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  brand TEXT NOT NULL,
+  category TEXT NOT NULL,
+  subcategory TEXT,
+  model_sku TEXT,
+  price NUMERIC(10,2) NOT NULL,
+  original_price NUMERIC(10,2),
+  discount_price NUMERIC(10,2),
+  discount_percent INT DEFAULT 0,
+  offer TEXT,
+  stock INT NOT NULL DEFAULT 0,
+  color TEXT,
+  compatibility TEXT,
+  description TEXT,
+  specs JSONB DEFAULT '{}'::JSONB,
+  images TEXT[] DEFAULT '{}',
+  image_url TEXT,
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  published BOOLEAN DEFAULT TRUE,
+  available BOOLEAN DEFAULT TRUE,
+  tags TEXT[] DEFAULT '{}',
+  average_rating NUMERIC(3,2) DEFAULT 4.8,
+  review_count INT DEFAULT 12,
+  sold_count INT DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_accessories_category ON public.accessories(category);
+CREATE INDEX IF NOT EXISTS idx_accessories_brand ON public.accessories(brand);
+CREATE INDEX IF NOT EXISTS idx_accessories_is_active ON public.accessories(is_active);
+CREATE INDEX IF NOT EXISTS idx_accessories_published ON public.accessories(published);
+CREATE INDEX IF NOT EXISTS idx_accessories_is_featured ON public.accessories(is_featured);
+CREATE INDEX IF NOT EXISTS idx_accessories_price ON public.accessories(price);
+CREATE INDEX IF NOT EXISTS idx_accessories_created_at ON public.accessories(created_at DESC);
+
+ALTER TABLE public.accessories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.accessory_categories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read active accessories" ON public.accessories;
+CREATE POLICY "Public read active accessories"
+  ON public.accessories FOR SELECT
+  USING (TRUE);
+
+DROP POLICY IF EXISTS "Server full access on accessories" ON public.accessories;
+CREATE POLICY "Server full access on accessories"
+  ON public.accessories FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+DROP POLICY IF EXISTS "Public read accessory categories" ON public.accessory_categories;
+CREATE POLICY "Public read accessory categories"
+  ON public.accessory_categories FOR SELECT
+  USING (TRUE);
+
+DROP POLICY IF EXISTS "Server full access on accessory categories" ON public.accessory_categories;
+CREATE POLICY "Server full access on accessory categories"
+  ON public.accessory_categories FOR ALL
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+CREATE OR REPLACE TRIGGER trg_accessories_updated_at
+  BEFORE UPDATE ON public.accessories FOR EACH ROW EXECUTE FUNCTION set_updated_at();

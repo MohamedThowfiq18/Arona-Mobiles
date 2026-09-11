@@ -11,8 +11,8 @@ import styles from './Navbar.module.css';
 
 const CATEGORIES = [
   { label: 'Smartphones', href: '/shop?category=smartphones' },
-  { label: 'Certified Pre-Owned', href: '/shop?category=certified-pre-owned' },
-  { label: 'Accessories', href: '/shop?category=accessories' },
+  { label: 'Certified Pre-Owned', href: '/certified-preowned' },
+  { label: 'Accessories', href: '/accessories' },
   { label: 'Trade-In', href: '/trade-in' },
   { label: 'Repair', href: '/repair' },
 ];

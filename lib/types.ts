@@ -37,6 +37,45 @@ export interface Category {
   description?: string;
 }
 
+export interface AccessoryCategory {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  sort_order?: number;
+}
+
+export interface Accessory {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  subcategory?: string;
+  model_sku?: string;
+  price: number;
+  original_price?: number;
+  discount_price?: number;
+  discount_percent?: number;
+  offer?: string;
+  stock: number;
+  color?: string;
+  compatibility?: string;
+  description?: string;
+  specs?: Record<string, any>;
+  images: string[];
+  image_url?: string;
+  is_featured: boolean;
+  is_active: boolean;
+  published?: boolean;
+  available?: boolean;
+  tags?: string[];
+  average_rating: number;
+  review_count: number;
+  sold_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProductSpecs {
   display?: string;
   processor?: string;

@@ -6,13 +6,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import styles from './OwnerSidebar.module.css';
 
 const NAV = [
-  { href: '/owner-portal',          label: 'Dashboard',      icon: '📊' },
-  { href: '/owner-portal/products', label: 'Products',       icon: '📱' },
-  { href: '/owner-portal/settings', label: 'Store & Phones', icon: '📞' },
-  { href: '/owner-portal/trade-in', label: 'Trade-Ins',      icon: '🔁' },
-  { href: '/owner-portal/repairs',  label: 'Repairs',        icon: '🔧' },
-  { href: '/owner-portal/reviews',  label: 'Reviews & Q&A',  icon: '⭐' },
-  { href: '/owner-portal/coupons',  label: 'Coupons',        icon: '🎟️' },
+  { href: '/owner-portal',             label: 'Dashboard',      icon: '📊' },
+  { href: '/owner-portal/products',    label: 'Phones / Mobiles',icon: '📱' },
+  { href: '/owner-portal/accessories', label: 'Accessories',    icon: '🔌' },
+  { href: '/owner-portal/settings',    label: 'Store & Phones', icon: '📞' },
+  { href: '/owner-portal/trade-in',    label: 'Trade-Ins',      icon: '🔁' },
+  { href: '/owner-portal/repairs',     label: 'Repairs',        icon: '🔧' },
+  { href: '/owner-portal/reviews',     label: 'Reviews & Q&A',  icon: '⭐' },
+  { href: '/owner-portal/coupons',     label: 'Coupons',        icon: '🎟️' },
 ];
 
 export default function OwnerSidebar() {

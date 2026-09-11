@@ -53,7 +53,7 @@ export default function Footer() {
             <li><Link href="/trade-in">Trade-In</Link></li>
             <li><Link href="/repair">Repair &amp; Care</Link></li>
             <li><Link href="/repair/status">Check Repair Status</Link></li>
-            <li><Link href="/shop?category=accessories">Accessories</Link></li>
+            <li><Link href="/accessories">Accessories</Link></li>
             <li><Link href="/compare">Compare Phones</Link></li>
             <li><Link href="/search">Search</Link></li>
           </ul>

@@ -28,7 +28,7 @@ export default async function HomePage() {
             {[
               { icon: '📱', label: 'New Smartphones', href: '/shop?condition=new', color: '#DBEAFE' },
               { icon: '✅', label: 'Certified Pre-Owned', href: '/certified-preowned', color: '#EDE9FE' },
-              { icon: '🔌', label: 'Accessories', href: '/shop?category=accessories', color: '#ECFDF5' },
+              { icon: '🔌', label: 'Accessories', href: '/accessories', color: '#ECFDF5' },
               { icon: '🔁', label: 'Trade-In', href: '/trade-in', color: '#FEF3C7' },
               { icon: '🔧', label: 'Repair & Care', href: '/repair', color: '#FEE2E2' },
               { icon: '⚡', label: 'Flash Deals', href: '/shop?sort=discount', color: '#FFF7ED' },
