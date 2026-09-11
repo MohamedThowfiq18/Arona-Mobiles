@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { showToast } from '@/components/customer/Toast/Toast';
+import type { Product } from '@/lib/types';
 import styles from './page.module.css';
 
 const CONDITION_QUESTIONS = [
@@ -14,20 +15,179 @@ const CONDITION_QUESTIONS = [
   { id: 'accessories', label: 'What do you have?', options: ['Phone only', 'Phone + Box', 'Phone + Charger + Box', 'All accessories'] },
 ];
 
-function estimateValue(brand: string, model: string, answers: Record<string, string>): number {
-  let base = 5000;
-  if (brand.toLowerCase().includes('apple')) base = 12000;
-  if (brand.toLowerCase().includes('samsung')) base = 8000;
+/**
+ * Resolves the phone's current Arona Mobiles selling price from catalog data.
+ * Uses current selling price (discount_price or price), NOT launch price or MRP.
+ */
+function getPhoneSellingPrice(
+  brand: string,
+  model: string,
+  storage: string,
+  products: Product[]
+): number {
+  if (!products || products.length === 0) {
+    return 30000;
+  }
 
-  const screenPenalty   = { 'Like New': 0, 'Minor Scratches': 0.05, 'Visible Cracks': 0.25, 'Shattered': 0.5 };
-  const bodyPenalty     = { 'Like New': 0, 'Minor Scratches': 0.05, 'Dents/Bends': 0.15, 'Broken': 0.40 };
-  const batteryPenalty  = { 'All day (80%+)': 0, 'Half day (60–80%)': 0.1, 'Poor (below 60%)': 0.25, 'Not sure': 0.15 };
+  const cleanBrand = (brand || '').trim().toLowerCase();
+  const cleanModel = (model || '').trim().toLowerCase();
+  const cleanStorage = (storage || '').trim().toLowerCase();
 
-  const sp = screenPenalty[answers.screen_condition as keyof typeof screenPenalty] || 0;
-  const bp = bodyPenalty[answers.body_condition as keyof typeof bodyPenalty] || 0;
-  const bap = batteryPenalty[answers.battery_health as keyof typeof batteryPenalty] || 0;
+  // 1. Exact match on brand and model
+  let matched = products.find(
+    p => p.brand.toLowerCase() === cleanBrand && p.model.toLowerCase() === cleanModel
+  );
 
-  return Math.round(base * (1 - sp - bp - bap));
+  // 2. Partial match (e.g. "iPhone 14" in catalog product title/model)
+  if (!matched && cleanModel) {
+    matched = products.find(
+      p =>
+        (p.brand.toLowerCase() === cleanBrand || cleanBrand === 'other') &&
+        (p.model.toLowerCase().includes(cleanModel) || cleanModel.includes(p.model.toLowerCase()))
+    );
+  }
+
+  // 3. Fallback to same brand
+  if (!matched && cleanBrand && cleanBrand !== 'other') {
+    matched = products.find(p => p.brand.toLowerCase() === cleanBrand);
+  }
+
+  // 4. Extract current selling price (variant price if matching storage, else product selling price)
+  if (matched) {
+    if (cleanStorage && Array.isArray(matched.variants) && matched.variants.length > 0) {
+      const variant = matched.variants.find(
+        v => v.storage && v.storage.toLowerCase().includes(cleanStorage)
+      );
+      if (variant) {
+        const vPrice = Number(variant.discount_price ?? variant.price);
+        if (vPrice > 0) return vPrice;
+      }
+    }
+
+    const sPrice = Number(matched.discount_price ?? matched.price);
+    if (sPrice > 0) return sPrice;
+  }
+
+  // 5. Dynamic average across active catalog
+  const activePrices = products
+    .map(p => Number(p.discount_price ?? p.price))
+    .filter(p => p > 0);
+
+  if (activePrices.length > 0) {
+    const avg = activePrices.reduce((a, b) => a + b, 0) / activePrices.length;
+    return Math.round(avg);
+  }
+
+  return 30000;
+}
+
+/**
+ * Calculates Trade-In estimate based primarily on CURRENT ARONA MOBILES SELLING PRICE.
+ * Condition Maximums:
+ * - Excellent: UP TO 83% of selling price
+ * - Good:      UP TO 73% of selling price
+ * - Fair:      UP TO 63% of selling price
+ * - Poor:      UP TO 50% of selling price
+ * 
+ * Safety Invariant: Estimate is strictly lower than selling price (never equal or greater).
+ */
+function estimateValue(
+  brand: string,
+  model: string,
+  storage: string,
+  answers: Record<string, string>,
+  products: Product[]
+): number {
+  const sellingPrice = getPhoneSellingPrice(brand, model, storage, products);
+  if (sellingPrice <= 0) return 0;
+
+  const screen = answers.screen_condition || 'Like New';
+  const body = answers.body_condition || 'Like New';
+  const battery = answers.battery_health || 'All day (80%+)';
+  const charging = answers.charging_port || 'Yes, perfectly';
+  const camera = answers.camera_condition || 'Perfect';
+  const accessories = answers.accessories || 'All accessories';
+
+  // Determine Condition Tier
+  const isPoor =
+    screen === 'Shattered' ||
+    body === 'Broken' ||
+    camera === 'Not working' ||
+    charging === 'No' ||
+    battery === 'Poor (below 60%)';
+
+  const isFair =
+    !isPoor &&
+    (screen === 'Visible Cracks' ||
+      body === 'Dents/Bends' ||
+      camera === 'Minor issues' ||
+      charging === 'Sometimes');
+
+  const isGood =
+    !isPoor &&
+    !isFair &&
+    (screen === 'Minor Scratches' ||
+      body === 'Minor Scratches' ||
+      battery === 'Half day (60–80%)' ||
+      battery === 'Not sure');
+
+  let maxConditionPercentage = 0.83; // Excellent: UP TO 83%
+  if (isPoor) {
+    maxConditionPercentage = 0.50;  // Poor: UP TO 50%
+  } else if (isFair) {
+    maxConditionPercentage = 0.63;  // Fair: UP TO 63%
+  } else if (isGood) {
+    maxConditionPercentage = 0.73;  // Good: UP TO 73%
+  }
+
+  // Deductions based on detailed inspection answers
+  let deductionPct = 0;
+
+  // Accessories
+  if (accessories === 'Phone only') {
+    deductionPct += 0.03;
+  } else if (accessories === 'Phone + Box') {
+    deductionPct += 0.015;
+  }
+
+  // Minor wear inside Good tier
+  if (isGood) {
+    if (screen === 'Minor Scratches') deductionPct += 0.005;
+    if (body === 'Minor Scratches') deductionPct += 0.005;
+    if (battery === 'Not sure') deductionPct += 0.01;
+  }
+
+  // Fair tier deductions
+  if (isFair) {
+    if (screen === 'Visible Cracks') deductionPct += 0.02;
+    if (body === 'Dents/Bends') deductionPct += 0.015;
+    if (camera === 'Minor issues') deductionPct += 0.015;
+    if (charging === 'Sometimes') deductionPct += 0.015;
+  }
+
+  // Poor tier deductions
+  if (isPoor) {
+    if (screen === 'Shattered') deductionPct += 0.03;
+    if (body === 'Broken') deductionPct += 0.03;
+    if (camera === 'Not working') deductionPct += 0.02;
+    if (charging === 'No') deductionPct += 0.02;
+  }
+
+  const effectivePct = Math.max(0.20, maxConditionPercentage - deductionPct);
+  let rawEstimate = Math.round(sellingPrice * effectivePct);
+
+  // Round to nearest 50 for clean presentation
+  let estimate = Math.round(rawEstimate / 50) * 50;
+
+  // Condition maximum cap (e.g. 83% for excellent, 73% for good, 63% for fair, 50% for poor)
+  const conditionMax = Math.round(sellingPrice * maxConditionPercentage);
+  estimate = Math.min(estimate, conditionMax);
+
+  // CRITICAL INVARIANT: Trade-in value must NEVER equal or exceed the Arona selling price
+  const absoluteMax = Math.max(0, sellingPrice - 500);
+  estimate = Math.min(estimate, absoluteMax);
+
+  return Math.max(500, estimate);
 }
 
 export default function TradeInPage() {
@@ -38,11 +198,29 @@ export default function TradeInPage() {
   const [submitted, setSubmitted] = useState(false);
   const [slot, setSlot] = useState('');
   const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.products && Array.isArray(data.products)) {
+            setProducts(data.products);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching catalog for trade-in:', err);
+      }
+    }
+    loadCatalog();
+  }, []);
 
   const handleAnswer = (id: string, val: string) => setAnswers(a => ({ ...a, [id]: val }));
 
   const getEstimate = () => {
-    const val = estimateValue(device.brand, device.model, answers);
+    const val = estimateValue(device.brand, device.model, device.storage, answers, products);
     setEstimate(val);
     setStep(3);
   };
@@ -113,7 +291,20 @@ export default function TradeInPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Model (e.g. iPhone 14, Galaxy S22)</label>
-                <input className="form-input" value={device.model} onChange={e => setDevice(d => ({ ...d, model: e.target.value }))} placeholder="Enter exact model name" />
+                <input
+                  className="form-input"
+                  list="trade-in-models"
+                  value={device.model}
+                  onChange={e => setDevice(d => ({ ...d, model: e.target.value }))}
+                  placeholder="Enter exact model name"
+                />
+                <datalist id="trade-in-models">
+                  {products
+                    .filter(p => !device.brand || p.brand.toLowerCase() === device.brand.toLowerCase())
+                    .map(p => (
+                      <option key={p.id} value={p.model} />
+                    ))}
+                </datalist>
               </div>
               <div className="form-group">
                 <label className="form-label">Storage</label>
