@@ -77,11 +77,11 @@ export async function POST(request: NextRequest) {
     const cleanModel = sanitizeString(phoneModel.trim(), 100);
     const cleanIssue = issueDescription ? sanitizeString(String(issueDescription).trim(), 1000) : '';
     const cleanService = sanitizeString(serviceType.trim(), 100);
-    const priceNum = typeof servicePrice === 'number' && !isNaN(servicePrice) ? servicePrice : null;
+    const priceNum = typeof servicePrice === 'number' && !isNaN(servicePrice) ? Number(servicePrice) : null;
     const slotIso = dateObj.toISOString();
     const nowIso = new Date().toISOString();
 
-    // ── 2. Insert into Supabase ──────────────────────────────────
+    // ── 2. Insert into Supabase using Server Admin/Service Role ──
     if (!isSupabaseConfigured()) {
       return NextResponse.json(
         { error: 'Database service is currently unavailable. Please try again or contact the store.' },
@@ -91,8 +91,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Primary insert payload with both explicit columns & legacy compatibility columns
-    const fullPayload = {
+    // Exact database columns as defined in schema:
+    // customer_name, customer_phone, phone_brand, phone_model, issue_description,
+    // service_type, service_price, preferred_date_time, status, notes, created_at, updated_at
+    const directPayload = {
       customer_name: cleanName,
       customer_phone: cleanPhone,
       phone_brand: cleanBrand,
@@ -101,16 +103,8 @@ export async function POST(request: NextRequest) {
       service_type: cleanService,
       service_price: priceNum,
       preferred_date_time: slotIso,
-      scheduled_slot: slotIso,
-      device_info: {
-        brand: cleanBrand,
-        model: cleanModel,
-        issue: cleanIssue || '',
-        issue_description: cleanIssue || '',
-        customer_name: cleanName,
-        customer_phone: cleanPhone,
-      },
       status: 'pending',
+      notes: null,
       created_at: nowIso,
       updated_at: nowIso,
     };
@@ -119,57 +113,78 @@ export async function POST(request: NextRequest) {
 
     const { data: primaryData, error: primaryErr } = await supabase
       .from('repair_bookings')
-      .insert(fullPayload)
+      .insert(directPayload)
       .select('*')
       .single();
 
     if (!primaryErr && primaryData) {
       insertedRow = primaryData;
     } else {
-      console.warn('[Repairs API] Full payload insert error, attempting legacy schema fallback:', primaryErr?.message);
-      // Fallback: in case Supabase table only has the original schema columns (service_type, device_info, scheduled_slot, status)
-      const legacyPayload = {
-        service_type: cleanService,
+      console.warn('[Repairs API] Direct column insert message:', primaryErr?.message);
+
+      // Attempt with legacy fallback columns (device_info / scheduled_slot) in case of pre-migration schema
+      const fallbackPayload = {
+        ...directPayload,
+        scheduled_slot: slotIso,
         device_info: {
           brand: cleanBrand,
           model: cleanModel,
           issue: cleanIssue || '',
-          issue_description: cleanIssue || '',
           customer_name: cleanName,
           customer_phone: cleanPhone,
         },
-        scheduled_slot: slotIso,
-        status: 'pending',
-        estimated_cost: priceNum,
-        created_at: nowIso,
-        updated_at: nowIso,
       };
 
-      const { data: legacyData, error: legacyErr } = await supabase
+      const { data: fallbackData, error: fallbackErr } = await supabase
         .from('repair_bookings')
-        .insert(legacyPayload)
+        .insert(fallbackPayload)
         .select('*')
         .single();
 
-      if (legacyErr || !legacyData) {
-        console.error('[Repairs API] Database insertion failed completely:', legacyErr?.message);
-        return NextResponse.json(
-          { error: 'Failed to record repair booking in database. Please try again.' },
-          { status: 500 }
-        );
-      }
+      if (!fallbackErr && fallbackData) {
+        insertedRow = fallbackData;
+      } else {
+        // Third fallback: minimal legacy schema
+        const minimalLegacy = {
+          service_type: cleanService,
+          device_info: {
+            brand: cleanBrand,
+            model: cleanModel,
+            issue: cleanIssue || '',
+            customer_name: cleanName,
+            customer_phone: cleanPhone,
+          },
+          scheduled_slot: slotIso,
+          status: 'pending',
+          estimated_cost: priceNum,
+        };
 
-      insertedRow = {
-        ...legacyData,
-        customer_name: cleanName,
-        customer_phone: cleanPhone,
-        phone_brand: cleanBrand,
-        phone_model: cleanModel,
-        issue_description: cleanIssue,
-        service_type: cleanService,
-        service_price: priceNum,
-        preferred_date_time: slotIso,
-      };
+        const { data: minData, error: minErr } = await supabase
+          .from('repair_bookings')
+          .insert(minimalLegacy)
+          .select('*')
+          .single();
+
+        if (minErr || !minData) {
+          console.error('[Repairs API] All insert strategies failed:', primaryErr?.message, fallbackErr?.message, minErr?.message);
+          return NextResponse.json(
+            { error: primaryErr?.message || fallbackErr?.message || minErr?.message || 'Database insert failed. Please try again.' },
+            { status: 500 }
+          );
+        }
+
+        insertedRow = {
+          ...minData,
+          customer_name: cleanName,
+          customer_phone: cleanPhone,
+          phone_brand: cleanBrand,
+          phone_model: cleanModel,
+          issue_description: cleanIssue,
+          service_type: cleanService,
+          service_price: priceNum,
+          preferred_date_time: slotIso,
+        };
+      }
     }
 
     return NextResponse.json({
@@ -177,13 +192,13 @@ export async function POST(request: NextRequest) {
       message: 'Repair appointment booked successfully!',
       booking: {
         id: insertedRow.id,
-        customerName: cleanName,
-        customerPhone: cleanPhone,
-        phoneBrand: cleanBrand,
-        phoneModel: cleanModel,
-        serviceType: cleanService,
-        servicePrice: priceNum,
-        preferredDateTime: slotIso,
+        customerName: insertedRow.customer_name || cleanName,
+        customerPhone: insertedRow.customer_phone || cleanPhone,
+        phoneBrand: insertedRow.phone_brand || cleanBrand,
+        phoneModel: insertedRow.phone_model || cleanModel,
+        serviceType: insertedRow.service_type || cleanService,
+        servicePrice: insertedRow.service_price ?? priceNum,
+        preferredDateTime: insertedRow.preferred_date_time || slotIso,
         status: insertedRow.status || 'pending',
         createdAt: insertedRow.created_at || nowIso,
       },
