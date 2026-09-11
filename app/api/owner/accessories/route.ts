@@ -104,7 +104,12 @@ export async function POST(request: NextRequest) {
       message: 'Accessory added successfully!',
     }, { status: 201 });
   } catch (error: any) {
-    console.error('Owner accessory creation error:', error);
+    console.error('Owner accessory creation error:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+    });
     return NextResponse.json(
       { error: error?.message || 'Failed to create accessory in database. Please check input parameters.' },
       { status: 500 }

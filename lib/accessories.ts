@@ -100,7 +100,7 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
 
   const id = accessoryData.id && String(accessoryData.id).trim().length > 0
     ? String(accessoryData.id).trim()
-    : `acc-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    : randomUUID();
 
   const now = new Date().toISOString();
   const primaryImg = accessoryData.image_url || (accessoryData.images && accessoryData.images[0]) || '';
@@ -153,14 +153,55 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
   };
 
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
+  
+  // Try standard insert
+  let { data, error } = await supabase
     .from('accessories')
-    .upsert(newRecord, { onConflict: 'id' })
+    .insert(newRecord)
     .select('*')
-    .single();
+    .maybeSingle();
+
+  // If duplicate key / conflict on ID, perform update instead
+  if (error && (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('already exists'))) {
+    const updateRes = await supabase
+      .from('accessories')
+      .update(newRecord)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle();
+    data = updateRes.data;
+    error = updateRes.error;
+  }
+
+  // If schema mismatch (column doesn't exist in older table migration, code 42703), retry with core columns
+  if (error && (error.code === '42703' || error.message?.includes('column'))) {
+    console.warn('Retrying accessory insert with core columns due to schema difference:', error.message);
+    const coreRecord: Record<string, any> = {
+      id,
+      name: newRecord.name,
+      brand: newRecord.brand,
+      category: newRecord.category,
+      price: newRecord.price,
+      stock: newRecord.stock,
+      description: newRecord.description,
+      image_url: newRecord.image_url,
+      images: newRecord.images,
+      is_active: newRecord.is_active,
+      is_featured: newRecord.is_featured,
+      created_at: now,
+      updated_at: now,
+    };
+    const retryRes = await supabase
+      .from('accessories')
+      .insert(coreRecord)
+      .select('*')
+      .maybeSingle();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
-    console.error('Supabase accessory insert/upsert error:', {
+    console.error('Supabase accessory insert error:', {
       message: error.message,
       code: error.code,
       details: error.details,
@@ -218,12 +259,39 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
   }
 
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('accessories')
     .update(cleanUpdates)
     .eq('id', cleanId)
     .select('*')
     .maybeSingle();
+
+  // If schema mismatch (column doesn't exist in older table migration, code 42703), retry with core update columns
+  if (error && (error.code === '42703' || error.message?.includes('column'))) {
+    console.warn('Retrying accessory update with core columns due to schema difference:', error.message);
+    const coreUpdates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (cleanUpdates.name !== undefined) coreUpdates.name = cleanUpdates.name;
+    if (cleanUpdates.brand !== undefined) coreUpdates.brand = cleanUpdates.brand;
+    if (cleanUpdates.category !== undefined) coreUpdates.category = cleanUpdates.category;
+    if (cleanUpdates.price !== undefined) coreUpdates.price = cleanUpdates.price;
+    if (cleanUpdates.stock !== undefined) coreUpdates.stock = cleanUpdates.stock;
+    if (cleanUpdates.description !== undefined) coreUpdates.description = cleanUpdates.description;
+    if (cleanUpdates.image_url !== undefined) coreUpdates.image_url = cleanUpdates.image_url;
+    if (cleanUpdates.images !== undefined) coreUpdates.images = cleanUpdates.images;
+    if (cleanUpdates.is_active !== undefined) coreUpdates.is_active = cleanUpdates.is_active;
+    if (cleanUpdates.is_featured !== undefined) coreUpdates.is_featured = cleanUpdates.is_featured;
+
+    const retryRes = await supabase
+      .from('accessories')
+      .update(coreUpdates)
+      .eq('id', cleanId)
+      .select('*')
+      .maybeSingle();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
     console.error('Supabase accessory update error:', {
