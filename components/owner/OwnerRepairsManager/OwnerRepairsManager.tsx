@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { showToast } from '@/components/customer/Toast/Toast';
 import type { RepairBooking } from '@/lib/types';
@@ -30,18 +30,62 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 };
 
 export default function OwnerRepairsManager({ initialBookings }: Props) {
-  const [bookings, setBookings] = useState<RepairBooking[]>(initialBookings);
+  const [bookings, setBookings] = useState<RepairBooking[]>(initialBookings || []);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ── 1. Setup Supabase Realtime Subscription ──────────────────────
+  // ── 1. Fetch Latest Bookings from Owner API ───────────────────────
+  const fetchBookings = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/owner/repairs', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.bookings)) {
+          setBookings(data.bookings);
+        }
+      }
+    } catch (err) {
+      console.warn('[OwnerRepairsManager] Fetch error:', err);
+    } finally {
+      if (!isSilent) setIsRefreshing(false);
+    }
+  }, []);
+
+  // Update state if initialBookings prop changes
+  useEffect(() => {
+    if (initialBookings && initialBookings.length > 0) {
+      setBookings(initialBookings);
+    }
+  }, [initialBookings]);
+
+  // Client-side fetch on initial mount and when window gains focus
+  useEffect(() => {
+    fetchBookings(false);
+
+    const onFocus = () => fetchBookings(true);
+    window.addEventListener('focus', onFocus);
+
+    // Smart 6-second polling fallback to guarantee real-time synchronization
+    const pollInterval = setInterval(() => {
+      fetchBookings(true);
+    }, 6000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(pollInterval);
+    };
+  }, [fetchBookings]);
+
+  // ── 2. Setup Supabase Realtime Subscription ──────────────────────
   useEffect(() => {
     let channel: any = null;
     try {
       const supabase = getSupabaseClient();
       channel = supabase
-        .channel('realtime:repair_bookings')
+        .channel('realtime:owner_repair_bookings')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'repair_bookings' },
@@ -51,22 +95,21 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
               const dev = newRow.device_info || {};
               const normalized: RepairBooking = {
                 id: newRow.id,
-                customer_name: newRow.customer_name || dev.customer_name || 'Customer',
-                customer_phone: newRow.customer_phone || dev.customer_phone || '',
-                phone_brand: newRow.phone_brand || dev.brand || '',
-                phone_model: newRow.phone_model || dev.model || '',
+                customer_name: newRow.customer_name || dev.customer_name || dev.name || 'Customer',
+                customer_phone: newRow.customer_phone || dev.customer_phone || dev.phone || '',
+                phone_brand: newRow.phone_brand || dev.brand || dev.phone_brand || '',
+                phone_model: newRow.phone_model || dev.model || dev.phone_model || '',
                 issue_description: newRow.issue_description || dev.issue || dev.issue_description || '',
                 service_type: newRow.service_type || 'Repair Service',
                 service_price: newRow.service_price ?? newRow.estimated_cost ?? null,
                 preferred_date_time: newRow.preferred_date_time || newRow.scheduled_slot || null,
-                status: newRow.status || 'pending',
+                status: (String(newRow.status || 'pending').toLowerCase().trim()) as RepairBooking['status'],
                 notes: newRow.notes || newRow.technician_notes || '',
-                created_at: newRow.created_at,
-                updated_at: newRow.updated_at || newRow.created_at,
+                created_at: newRow.created_at || new Date().toISOString(),
+                updated_at: newRow.updated_at || newRow.created_at || new Date().toISOString(),
               };
 
               setBookings(prev => {
-                // Prevent duplicate if already added
                 if (prev.some(b => b.id === normalized.id)) return prev;
                 return [normalized, ...prev];
               });
@@ -79,6 +122,8 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
             } else if (payload.eventType === 'UPDATE') {
               const updatedRow = payload.new;
               const dev = updatedRow.device_info || {};
+              const cleanStatus = (String(updatedRow.status || 'pending').toLowerCase().trim()) as RepairBooking['status'];
+
               setBookings(prev =>
                 prev.map(b => {
                   if (b.id !== updatedRow.id) return b;
@@ -92,9 +137,9 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
                     service_type: updatedRow.service_type || b.service_type,
                     service_price: updatedRow.service_price ?? updatedRow.estimated_cost ?? b.service_price,
                     preferred_date_time: updatedRow.preferred_date_time || updatedRow.scheduled_slot || b.preferred_date_time,
-                    status: updatedRow.status || b.status,
+                    status: cleanStatus,
                     notes: updatedRow.notes || updatedRow.technician_notes || b.notes,
-                    updated_at: updatedRow.updated_at || b.updated_at,
+                    updated_at: updatedRow.updated_at || new Date().toISOString(),
                   };
                 })
               );
@@ -121,7 +166,7 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
     };
   }, []);
 
-  // ── 2. Update Status via Server API ──────────────────────────────
+  // ── 3. Update Status via Server API ──────────────────────────────
   const handleStatusChange = async (id: string, newStatus: string) => {
     setUpdatingId(id);
     const previous = bookings.find(b => b.id === id)?.status;
@@ -177,9 +222,10 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
     }
   };
 
-  // ── 3. Filter Bookings ──────────────────────────────────────────
+  // ── 4. Filter Bookings ──────────────────────────────────────────
   const filtered = bookings.filter(b => {
-    const matchStatus = !statusFilter || b.status === statusFilter;
+    const itemStatus = String(b.status || 'pending').toLowerCase().trim();
+    const matchStatus = !statusFilter || itemStatus === statusFilter.toLowerCase().trim();
     if (!matchStatus) return false;
 
     if (!search.trim()) return true;
@@ -207,6 +253,15 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
         <div className={styles.headerLeft}>
           <h1 className={styles.title}>🔧 Repair Bookings</h1>
           <span className={styles.countBadge}>{filtered.length} Bookings</span>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={() => fetchBookings(false)}
+            disabled={isRefreshing}
+            style={{ fontSize: 12, padding: '4px 10px', height: 'auto' }}
+          >
+            {isRefreshing ? 'Refreshing...' : '🔄 Refresh'}
+          </button>
         </div>
         <div className={styles.liveIndicator}>
           <span className={styles.liveDot} />
@@ -226,12 +281,15 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
         >
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map(s => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, ' ').toUpperCase()}
-            </option>
-          ))}
+          <option value="">All Statuses ({bookings.length})</option>
+          {STATUS_OPTIONS.map(s => {
+            const count = bookings.filter(b => String(b.status || 'pending').toLowerCase().trim() === s).length;
+            return (
+              <option key={s} value={s}>
+                {s.replace(/_/g, ' ').toUpperCase()} ({count})
+              </option>
+            );
+          })}
         </select>
       </div>
 
@@ -245,8 +303,9 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
       ) : (
         <div className={styles.list}>
           {filtered.map(item => {
-            const statusConf = STATUS_CONFIG[item.status] || {
-              label: item.status.replace(/_/g, ' '),
+            const itemStatus = String(item.status || 'pending').toLowerCase().trim();
+            const statusConf = STATUS_CONFIG[itemStatus] || {
+              label: itemStatus.replace(/_/g, ' '),
               color: '#6B7280',
               bg: '#F3F4F6',
             };
@@ -293,7 +352,7 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
                     </span>
                     <select
                       className={`form-input form-select ${styles.statusSelect}`}
-                      value={item.status}
+                      value={itemStatus}
                       onChange={e => handleStatusChange(item.id, e.target.value)}
                       disabled={updatingId === item.id}
                     >
