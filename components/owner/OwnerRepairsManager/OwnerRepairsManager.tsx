@@ -19,15 +19,38 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending', color: '#D97706', bg: 'rgba(245, 158, 11, 0.12)' },
-  booked: { label: 'Booked', color: '#2563EB', bg: 'rgba(37, 99, 235, 0.12)' },
-  confirmed: { label: 'Confirmed', color: '#2563EB', bg: 'rgba(37, 99, 235, 0.12)' },
-  in_progress: { label: 'In Progress', color: '#7C3AED', bg: 'rgba(124, 58, 237, 0.12)' },
-  repaired: { label: 'Repaired', color: '#0891B2', bg: 'rgba(8, 145, 178, 0.12)' },
-  completed: { label: 'Completed', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)' },
-  delivered: { label: 'Delivered', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)' },
-  cancelled: { label: 'Cancelled', color: '#DC2626', bg: 'rgba(220, 38, 38, 0.12)' },
+  pending: { label: 'PENDING', color: '#D97706', bg: 'rgba(245, 158, 11, 0.12)' },
+  confirmed: { label: 'CONFIRMED', color: '#2563EB', bg: 'rgba(37, 99, 235, 0.12)' },
+  in_progress: { label: 'IN PROGRESS', color: '#7C3AED', bg: 'rgba(124, 58, 237, 0.12)' },
+  completed: { label: 'COMPLETED', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)' },
+  cancelled: { label: 'CANCELLED', color: '#DC2626', bg: 'rgba(220, 38, 38, 0.12)' },
+  booked: { label: 'CONFIRMED', color: '#2563EB', bg: 'rgba(37, 99, 235, 0.12)' },
+  repaired: { label: 'COMPLETED', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)' },
+  delivered: { label: 'COMPLETED', color: '#059669', bg: 'rgba(5, 150, 105, 0.12)' },
 };
+
+function normalizeBooking(b: any): RepairBooking {
+  const dev = b.device_info || {};
+  let statusRaw = String(b.status || 'pending').toLowerCase().trim();
+  if (statusRaw === 'booked') statusRaw = 'confirmed';
+  if (statusRaw === 'repaired' || statusRaw === 'delivered') statusRaw = 'completed';
+
+  return {
+    id: b.id,
+    customer_name: b.customer_name || dev.customer_name || dev.name || 'Customer',
+    customer_phone: b.customer_phone || dev.customer_phone || dev.phone || '',
+    phone_brand: b.phone_brand || dev.brand || dev.phone_brand || '',
+    phone_model: b.phone_model || dev.model || dev.phone_model || '',
+    issue_description: b.issue_description || dev.issue || dev.issue_description || '',
+    service_type: b.service_type || 'Repair Service',
+    service_price: b.service_price ?? b.estimated_cost ?? null,
+    preferred_date_time: b.preferred_date_time || b.scheduled_slot || null,
+    status: statusRaw as RepairBooking['status'],
+    notes: b.notes || b.technician_notes || '',
+    created_at: b.created_at || new Date().toISOString(),
+    updated_at: b.updated_at || b.created_at || new Date().toISOString(),
+  };
+}
 
 export default function OwnerRepairsManager({ initialBookings }: Props) {
   const [bookings, setBookings] = useState<RepairBooking[]>(initialBookings || []);
@@ -35,16 +58,20 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
   const [statusFilter, setStatusFilter] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
 
-  // ── 1. Fetch Latest Bookings from Owner API ───────────────────────
+  // ── 1. Fetch Latest Bookings from Owner API (no-store) ─────────────
   const fetchBookings = useCallback(async (isSilent = false) => {
     if (!isSilent) setIsRefreshing(true);
     try {
-      const res = await fetch('/api/owner/repairs', { cache: 'no-store' });
+      const res = await fetch('/api/owner/repairs', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.bookings)) {
-          setBookings(data.bookings);
+          setBookings(data.bookings.map(normalizeBooking));
         }
       }
     } catch (err) {
@@ -54,24 +81,24 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
     }
   }, []);
 
-  // Update state if initialBookings prop changes
+  // Update state when initialBookings prop is provided on SSR
   useEffect(() => {
     if (initialBookings && initialBookings.length > 0) {
-      setBookings(initialBookings);
+      setBookings(initialBookings.map(normalizeBooking));
     }
   }, [initialBookings]);
 
-  // Client-side fetch on initial mount and when window gains focus
+  // Client-side fetch on initial mount, focus, and fast fallback polling
   useEffect(() => {
     fetchBookings(false);
 
     const onFocus = () => fetchBookings(true);
     window.addEventListener('focus', onFocus);
 
-    // Smart 6-second polling fallback to guarantee real-time synchronization
+    // 4-second polling fallback to guarantee fresh data across devices
     const pollInterval = setInterval(() => {
       fetchBookings(true);
-    }, 6000);
+    }, 4000);
 
     return () => {
       window.removeEventListener('focus', onFocus);
@@ -90,26 +117,13 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'repair_bookings' },
           (payload: any) => {
+            console.info('[Realtime] repair_bookings event:', payload.eventType, payload);
+
             if (payload.eventType === 'INSERT') {
-              const newRow = payload.new;
-              const dev = newRow.device_info || {};
-              const normalized: RepairBooking = {
-                id: newRow.id,
-                customer_name: newRow.customer_name || dev.customer_name || dev.name || 'Customer',
-                customer_phone: newRow.customer_phone || dev.customer_phone || dev.phone || '',
-                phone_brand: newRow.phone_brand || dev.brand || dev.phone_brand || '',
-                phone_model: newRow.phone_model || dev.model || dev.phone_model || '',
-                issue_description: newRow.issue_description || dev.issue || dev.issue_description || '',
-                service_type: newRow.service_type || 'Repair Service',
-                service_price: newRow.service_price ?? newRow.estimated_cost ?? null,
-                preferred_date_time: newRow.preferred_date_time || newRow.scheduled_slot || null,
-                status: (String(newRow.status || 'pending').toLowerCase().trim()) as RepairBooking['status'],
-                notes: newRow.notes || newRow.technician_notes || '',
-                created_at: newRow.created_at || new Date().toISOString(),
-                updated_at: newRow.updated_at || newRow.created_at || new Date().toISOString(),
-              };
+              const normalized = normalizeBooking(payload.new);
 
               setBookings(prev => {
+                // Prevent duplicates
                 if (prev.some(b => b.id === normalized.id)) return prev;
                 return [normalized, ...prev];
               });
@@ -120,28 +134,10 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
                 message: `${normalized.customer_name || 'A customer'} booked ${normalized.service_type}`,
               });
             } else if (payload.eventType === 'UPDATE') {
-              const updatedRow = payload.new;
-              const dev = updatedRow.device_info || {};
-              const cleanStatus = (String(updatedRow.status || 'pending').toLowerCase().trim()) as RepairBooking['status'];
+              const normalized = normalizeBooking(payload.new);
 
               setBookings(prev =>
-                prev.map(b => {
-                  if (b.id !== updatedRow.id) return b;
-                  return {
-                    ...b,
-                    customer_name: updatedRow.customer_name || dev.customer_name || b.customer_name,
-                    customer_phone: updatedRow.customer_phone || dev.customer_phone || b.customer_phone,
-                    phone_brand: updatedRow.phone_brand || dev.brand || b.phone_brand,
-                    phone_model: updatedRow.phone_model || dev.model || b.phone_model,
-                    issue_description: updatedRow.issue_description || dev.issue || b.issue_description,
-                    service_type: updatedRow.service_type || b.service_type,
-                    service_price: updatedRow.service_price ?? updatedRow.estimated_cost ?? b.service_price,
-                    preferred_date_time: updatedRow.preferred_date_time || updatedRow.scheduled_slot || b.preferred_date_time,
-                    status: cleanStatus,
-                    notes: updatedRow.notes || updatedRow.technician_notes || b.notes,
-                    updated_at: updatedRow.updated_at || new Date().toISOString(),
-                  };
-                })
+                prev.map(b => (b.id === normalized.id ? { ...b, ...normalized } : b))
               );
             } else if (payload.eventType === 'DELETE') {
               const deletedId = payload.old?.id;
@@ -151,9 +147,16 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
             }
           }
         )
-        .subscribe();
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            setIsRealtimeLive(true);
+          } else {
+            setIsRealtimeLive(false);
+          }
+        });
     } catch (err) {
       console.warn('[Realtime] Failed to subscribe to repair_bookings channel:', err);
+      setIsRealtimeLive(false);
     }
 
     return () => {
@@ -166,21 +169,17 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
     };
   }, []);
 
-  // ── 3. Update Status via Server API ──────────────────────────────
+  // ── 3. Update Status via Server API (Server Confirmed) ───────────
   const handleStatusChange = async (id: string, newStatus: string) => {
+    if (updatingId === id) return;
     setUpdatingId(id);
-    const previous = bookings.find(b => b.id === id)?.status;
-
-    // Optimistic UI update
-    setBookings(prev =>
-      prev.map(b => (b.id === id ? { ...b, status: newStatus as any } : b))
-    );
 
     try {
       const res = await fetch(`/api/owner/repairs/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -188,34 +187,42 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        // Rollback on failure
-        if (previous) {
-          setBookings(prev =>
-            prev.map(b => (b.id === id ? { ...b, status: previous } : b))
-          );
-        }
         showToast({
           type: 'error',
           title: 'Status Update Failed',
-          message: data.error || 'Could not update status.',
+          message: data.error || 'Could not update status in Supabase.',
         });
-      } else {
-        showToast({
-          type: 'success',
-          title: 'Status Updated',
-          message: `Booking status updated to ${newStatus.replace(/_/g, ' ')}.`,
-        });
+        return;
       }
-    } catch (err) {
-      if (previous) {
-        setBookings(prev =>
-          prev.map(b => (b.id === id ? { ...b, status: previous } : b))
-        );
-      }
+
+      // Update state only after server confirms the database update
+      const updatedBooking = data.booking;
+      const confirmedStatus = (updatedBooking?.status || newStatus) as RepairBooking['status'];
+      const confirmedUpdatedAt = updatedBooking?.updated_at || new Date().toISOString();
+
+      setBookings(prev =>
+        prev.map(b =>
+          b.id === id
+            ? {
+                ...b,
+                status: confirmedStatus,
+                updated_at: confirmedUpdatedAt,
+              }
+            : b
+        )
+      );
+
+      const formattedLabel = confirmedStatus.replace(/_/g, ' ').toUpperCase();
+      showToast({
+        type: 'success',
+        title: 'Status Updated',
+        message: `Booking status updated to ${formattedLabel}.`,
+      });
+    } catch (err: any) {
       showToast({
         type: 'error',
         title: 'Network Error',
-        message: 'Could not reach server to update status.',
+        message: 'Could not reach server to update status. Please try again.',
       });
     } finally {
       setUpdatingId(null);
@@ -264,8 +271,8 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
           </button>
         </div>
         <div className={styles.liveIndicator}>
-          <span className={styles.liveDot} />
-          Realtime Live
+          <span className={isRealtimeLive ? styles.liveDot : styles.syncDot} />
+          {isRealtimeLive ? 'Realtime Live' : 'Live Syncing'}
         </div>
       </div>
 
@@ -348,7 +355,7 @@ export default function OwnerRepairsManager({ initialBookings }: Props) {
                       className={styles.statusBadge}
                       style={{ color: statusConf.color, backgroundColor: statusConf.bg }}
                     >
-                      {statusConf.label}
+                      {updatingId === item.id ? 'UPDATING...' : statusConf.label}
                     </span>
                     <select
                       className={`form-input form-select ${styles.statusSelect}`}

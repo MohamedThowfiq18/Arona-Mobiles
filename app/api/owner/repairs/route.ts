@@ -3,6 +3,8 @@ import { requireOwnerSession } from '@/lib/auth';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(request: NextRequest) {
   const auth = await requireOwnerSession(request);
@@ -14,7 +16,13 @@ export async function GET(request: NextRequest) {
   try {
     if (!isSupabaseConfigured()) {
       console.warn('[Owner Repairs API] Supabase is not configured; returning empty list.');
-      return NextResponse.json({ bookings: [] });
+      return NextResponse.json({ bookings: [] }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      });
     }
 
     const supabase = getSupabaseAdminClient();
@@ -32,7 +40,12 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json(
         { error: error.message || 'Failed to fetch repair bookings from database.' },
-        { status: 500 }
+        {
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          },
+        }
       );
     }
 
@@ -60,7 +73,16 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ bookings: normalized });
+    return NextResponse.json(
+      { bookings: normalized },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (err: any) {
     console.error('[Owner Repairs API] Server error:', err);
     return NextResponse.json(

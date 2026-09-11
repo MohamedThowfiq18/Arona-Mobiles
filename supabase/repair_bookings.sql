@@ -69,6 +69,12 @@ CREATE POLICY "Anyone can insert repair bookings"
   ON public.repair_bookings FOR INSERT
   WITH CHECK (TRUE);
 
+-- Allow SELECT for realtime subscription listeners
+DROP POLICY IF EXISTS "Allow select for realtime on repair bookings" ON public.repair_bookings;
+CREATE POLICY "Allow select for realtime on repair bookings"
+  ON public.repair_bookings FOR SELECT
+  USING (TRUE);
+
 -- Allow service role full access (Owner APIs use service-role key)
 DROP POLICY IF EXISTS "Service role full access on repair bookings" ON public.repair_bookings;
 CREATE POLICY "Service role full access on repair bookings"
