@@ -696,7 +696,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { STORE_CONFIG } from '@/lib/constants';
-import { getStoreSettings } from '@/lib/settings';
 
 /**
  * Retrieve owner credential record from Supabase PostgreSQL (Single source of truth across all devices)
@@ -742,10 +741,21 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
 
       // Step B: If no record found for this specific phone, check if this phone is an authorized owner number.
       // If authorized, fetch the single global store owner password record from any registered owner row.
-      const storeSettings = await getStoreSettings().catch(() => ({ authorized_owner_phones: [] }));
+      let dynamicPhones: string[] = [];
+      try {
+        const { data: settingsData } = await supabase
+          .from('store_settings')
+          .select('authorized_owner_phones')
+          .eq('id', 'default')
+          .maybeSingle();
+        if (settingsData?.authorized_owner_phones && Array.isArray(settingsData.authorized_owner_phones)) {
+          dynamicPhones = settingsData.authorized_owner_phones;
+        }
+      } catch {}
+
       const authorizedList = [
         ...STORE_CONFIG.authorizedOwnerPhones,
-        ...(storeSettings.authorized_owner_phones || []),
+        ...dynamicPhones,
       ].map(p => p.replace(/\D/g, '').slice(-10));
 
       if (authorizedList.includes(cleanPhone)) {
@@ -819,11 +829,25 @@ export async function saveOwnerPassword(
   const ownerId = `owner-${cleanPhone}`;
 
   // Gather all authorized owner numbers
-  const storeSettings = await getStoreSettings().catch(() => ({ authorized_owner_phones: [] }));
+  let dynamicPhones: string[] = [];
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      const { data: settingsData } = await supabase
+        .from('store_settings')
+        .select('authorized_owner_phones')
+        .eq('id', 'default')
+        .maybeSingle();
+      if (settingsData?.authorized_owner_phones && Array.isArray(settingsData.authorized_owner_phones)) {
+        dynamicPhones = settingsData.authorized_owner_phones;
+      }
+    } catch {}
+  }
+
   const allAuthorizedPhones = Array.from(new Set([
     cleanPhone,
     ...STORE_CONFIG.authorizedOwnerPhones,
-    ...(storeSettings.authorized_owner_phones || []),
+    ...dynamicPhones,
   ])).map(p => p.replace(/\D/g, '').slice(-10)).filter(Boolean);
 
   // 1. Invalidate in-memory sessions
