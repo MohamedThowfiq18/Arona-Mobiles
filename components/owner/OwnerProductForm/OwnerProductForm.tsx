@@ -54,26 +54,31 @@ export default function OwnerProductForm({ mode, product }: Props) {
   const [grade, setGrade] = useState<'A' | 'B' | 'C' | ''>(product?.grade || '');
 
   // Variant details
-  const [color, setColor] = useState(product?.variants?.[0]?.color || (product?.specs?.color as string) || '');
-  const [ram, setRam] = useState(product?.specs?.ram || '8 GB');
-  const [storage, setStorage] = useState<string>(product?.variants?.[0]?.storage || (product?.specs?.storage_built as string) || '256 GB');
-  const [offerDetails, setOfferDetails] = useState((product?.specs?.offer_details as string) || '');
+  const [color, setColor] = useState(product?.color || product?.variants?.[0]?.color || (product?.specs?.color as string) || '');
+  const [ram, setRam] = useState(product?.ram || (product?.specs?.ram as string) || '');
+  const [storage, setStorage] = useState<string>(product?.storage || product?.variants?.[0]?.storage || (product?.specs?.storage_built as string) || '');
+  const [offerDetails, setOfferDetails] = useState(product?.offer || (product?.specs?.offer_details as string) || '');
 
   // Pricing
-  const [price, setPrice] = useState(String(product?.price || ''));
-  const [discountPrice, setDiscountPrice] = useState(String(product?.discount_price || ''));
-  const [stock, setStock] = useState(String(product?.stock || ''));
+  const [price, setPrice] = useState(product?.price !== undefined ? String(product.price) : '');
+  const [originalPrice, setOriginalPrice] = useState(product?.original_price !== undefined && product?.original_price !== null ? String(product.original_price) : '');
+  const [discountPrice, setDiscountPrice] = useState(product?.discount_price !== undefined && product?.discount_price !== null ? String(product.discount_price) : '');
+  const [stock, setStock] = useState(product?.stock !== undefined ? String(product.stock) : '');
 
   // Images
-  const [images, setImages] = useState<string[]>(product?.images || []);
+  const [images, setImages] = useState<string[]>(
+    product?.images && product.images.length > 0
+      ? product.images
+      : (product?.image_url ? [product.image_url] : [])
+  );
   const [imageUrlInput, setImageUrlInput] = useState('');
 
   // Specs
   const [specs, setSpecs] = useState<Record<string, any>>((product?.specs as any) || defaultSpecs);
 
   // Flags
-  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? true);
-  const [isActive, setIsActive] = useState(product?.is_active ?? true);
+  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? product?.featured ?? true);
+  const [isActive, setIsActive] = useState(product?.is_active ?? product?.published ?? true);
   const [flashSaleEnds, setFlashSaleEnds] = useState(product?.flash_sale_ends_at ? product.flash_sale_ends_at.slice(0, 16) : '');
 
 
@@ -234,7 +239,7 @@ export default function OwnerProductForm({ mode, product }: Props) {
         condition,
         grade: condition === 'pre-owned' ? (grade || null) : null,
         price: Number(price),
-        original_price: discountPrice ? Number(price) : undefined,
+        original_price: originalPrice ? Number(originalPrice) : (discountPrice ? Number(price) : null),
         discount_price: discountPrice ? Number(discountPrice) : null,
         stock: Number(stock),
         available: Number(stock) > 0 && isActive,

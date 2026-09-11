@@ -95,28 +95,37 @@ export default function OwnerProductList({ initialProducts }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: nextState }),
       });
-      if (!res.ok) throw new Error('Failed to update product');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update product status');
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, is_active: nextState } : p));
       showToast({ type: 'success', title: `${product.model} ${nextState ? 'activated' : 'deactivated'}` });
-    } catch {
-      showToast({ type: 'error', title: 'Could not update status' });
+    } catch (err: any) {
+      showToast({ type: 'error', title: 'Could not update status', message: err?.message || 'Database update failed.' });
     } finally {
       setToggling(null);
     }
   };
 
   const deleteProduct = async (product: Product) => {
-    if (!confirm(`Delete "${product.brand} ${product.model}"? This cannot be undone.`)) return;
+    if (!confirm(`Are you sure you want to delete this product?\n\n${product.brand} ${product.model}`)) return;
     setDeleting(product.id);
     try {
       const res = await fetch(`/api/owner/products/${product.id}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error('Failed to delete product');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete product from database');
+      }
       setProducts(prev => prev.filter(p => p.id !== product.id));
-      showToast({ type: 'success', title: 'Product deleted' });
-    } catch {
-      showToast({ type: 'error', title: 'Could not delete product' });
+      showToast({ type: 'success', title: 'Product deleted successfully' });
+    } catch (err: any) {
+      console.error('Delete product error:', err);
+      showToast({
+        type: 'error',
+        title: 'Could not delete product',
+        message: err?.message || 'Failed to delete from Supabase.',
+      });
     } finally {
       setDeleting(null);
     }
