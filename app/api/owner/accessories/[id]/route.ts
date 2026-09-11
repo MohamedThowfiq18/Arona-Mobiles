@@ -15,12 +15,13 @@ export async function GET(
   if (auth.errorResponse) return auth.errorResponse;
 
   try {
-    const { id } = await params;
+    const resolvedParams = await params;
+    const id = decodeURIComponent(resolvedParams.id).trim();
     const accessory = await getAccessoryById(id);
 
     if (!accessory) {
       return NextResponse.json(
-        { error: 'Accessory not found' },
+        { success: false, error: 'Accessory not found' },
         { status: 404 }
       );
     }
@@ -32,7 +33,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Owner single accessory fetch error:', error);
     return NextResponse.json(
-      { error: error?.message || 'Failed to retrieve accessory details.' },
+      { success: false, error: error?.message || 'Failed to retrieve accessory details.' },
       { status: 500 }
     );
   }
@@ -49,12 +50,13 @@ export async function PUT(
   const ownerId = auth.session?.ownerId || 'owner';
 
   try {
-    const { id } = await params;
+    const resolvedParams = await params;
+    const id = decodeURIComponent(resolvedParams.id).trim();
     const body = await request.json().catch(() => ({}));
     const existing = await getAccessoryById(id);
 
     if (!existing) {
-      return NextResponse.json({ error: 'Accessory not found' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Accessory not found' }, { status: 404 });
     }
 
     // Input sanitization and formatting
@@ -68,13 +70,13 @@ export async function PUT(
     if (body.compatibility !== undefined) updates.compatibility = body.compatibility ? sanitizeString(body.compatibility, 250) : null;
     if (body.offer !== undefined) updates.offer = body.offer ? sanitizeString(body.offer, 200) : null;
     if (body.description !== undefined) updates.description = body.description ? sanitizeString(body.description, 2000) : null;
-    if (body.original_price !== undefined) updates.original_price = body.original_price !== null && body.original_price !== '' ? Number(body.original_price) : null;
-    if (body.discount_price !== undefined) updates.discount_price = body.discount_price !== null && body.discount_price !== '' ? Number(body.discount_price) : null;
+    if (body.original_price !== undefined) updates.original_price = body.original_price !== null && String(body.original_price).trim() !== '' ? Number(body.original_price) : null;
+    if (body.discount_price !== undefined) updates.discount_price = body.discount_price !== null && String(body.discount_price).trim() !== '' ? Number(body.discount_price) : null;
 
     if (body.price !== undefined) {
       const pCheck = validatePositiveNumber(body.price, 1);
       if (!pCheck.valid) {
-        return NextResponse.json({ error: 'Invalid price value.' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Invalid price value.' }, { status: 400 });
       }
       updates.price = pCheck.value;
     }
@@ -82,7 +84,7 @@ export async function PUT(
     if (body.stock !== undefined) {
       const sCheck = validatePositiveNumber(body.stock, 0);
       if (!sCheck.valid) {
-        return NextResponse.json({ error: 'Invalid stock value.' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Invalid stock value.' }, { status: 400 });
       }
       updates.stock = sCheck.value;
     }
@@ -123,7 +125,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Owner accessory update error:', error);
     return NextResponse.json(
-      { error: error?.message || 'Failed to update accessory details in database.' },
+      { success: false, error: error?.message || 'Failed to update accessory details in database.' },
       { status: 500 }
     );
   }
@@ -140,7 +142,8 @@ export async function DELETE(
   const ownerId = auth.session?.ownerId || 'owner';
 
   try {
-    const { id } = await params;
+    const resolvedParams = await params;
+    const id = decodeURIComponent(resolvedParams.id).trim();
     const existing = await getAccessoryById(id);
 
     await deleteAccessory(id);
@@ -174,7 +177,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Owner accessory delete error:', error);
     return NextResponse.json(
-      { error: error?.message || 'Failed to delete accessory from database.' },
+      { success: false, error: error?.message || 'Failed to delete accessory from database.' },
       { status: 500 }
     );
   }

@@ -39,6 +39,14 @@ export default function OwnerAccessoriesManager({ initialAccessories, categories
   };
 
   useEffect(() => {
+    setAccessories(initialAccessories);
+  }, [initialAccessories]);
+
+  useEffect(() => {
+    refreshAccessories();
+  }, []);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         refreshAccessories();

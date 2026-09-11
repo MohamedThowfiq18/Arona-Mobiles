@@ -209,7 +209,12 @@ export default function OwnerAccessoryForm({ mode, accessory, categories = INITI
         available: Number(stock) > 0 && isActive,
       };
 
-      const url = mode === 'add' ? '/api/owner/accessories' : `/api/owner/accessories/${accessory?.id}`;
+      const targetId = accessory?.id;
+      if (mode === 'edit' && !targetId) {
+        throw new Error('Accessory ID is missing for update operation');
+      }
+
+      const url = mode === 'add' ? '/api/owner/accessories' : `/api/owner/accessories/${encodeURIComponent(targetId!)}`;
       const method = mode === 'add' ? 'POST' : 'PUT';
 
       const res = await fetch(url, {
@@ -218,9 +223,9 @@ export default function OwnerAccessoryForm({ mode, accessory, categories = INITI
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to save accessory');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Failed to save accessory to database');
       }
 
       showToast({

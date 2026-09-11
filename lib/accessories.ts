@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import type { Accessory, AccessoryCategory } from '@/lib/types';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
-import { INITIAL_ACCESSORY_CATEGORIES, normalizeAccessory } from '@/lib/accessory-constants';
+import { INITIAL_ACCESSORY_CATEGORIES, INITIAL_ACCESSORIES, normalizeAccessory } from '@/lib/accessory-constants';
 
-export { INITIAL_ACCESSORY_CATEGORIES, normalizeAccessory };
+export { INITIAL_ACCESSORY_CATEGORIES, INITIAL_ACCESSORIES, normalizeAccessory };
 
 export async function getAllAccessories(includeInactive = false): Promise<Accessory[]> {
   if (!isSupabaseConfigured()) {
@@ -37,12 +37,14 @@ export async function getAccessoryById(id: string): Promise<Accessory | null> {
     return null;
   }
 
+  const cleanId = String(id).trim();
+
   try {
     const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase
       .from('accessories')
       .select('*')
-      .eq('id', id)
+      .eq('id', cleanId)
       .maybeSingle();
 
     if (error) {
@@ -52,10 +54,15 @@ export async function getAccessoryById(id: string): Promise<Accessory | null> {
 
     if (data) return normalizeAccessory(data);
 
+    // Check if it exists in baseline catalog for graceful edit loading
+    const baseline = INITIAL_ACCESSORIES.find(a => a.id === cleanId);
+    if (baseline) return normalizeAccessory(baseline);
+
     return null;
   } catch (err) {
     console.error('Supabase getAccessoryById unexpected error:', err);
-    return null;
+    const baseline = INITIAL_ACCESSORIES.find(a => a.id === cleanId);
+    return baseline ? normalizeAccessory(baseline) : null;
   }
 }
 
@@ -148,12 +155,17 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('accessories')
-    .insert(newRecord)
+    .upsert(newRecord, { onConflict: 'id' })
     .select('*')
     .single();
 
   if (error) {
-    console.error('Supabase accessory insert error:', error);
+    console.error('Supabase accessory insert/upsert error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database insert failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
@@ -165,6 +177,7 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
     throw new Error('Supabase credentials are not configured. Cannot update accessory in database.');
   }
 
+  const cleanId = String(id).trim();
   const primaryImg = updates.image_url || (updates.images && updates.images[0]);
   const imgList = updates.images && updates.images.length > 0 ? updates.images : (primaryImg ? [primaryImg] : undefined);
   const isActive = updates.is_active !== undefined ? updates.is_active : (updates.published !== undefined ? updates.published : undefined);
@@ -208,17 +221,32 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
   const { data, error } = await supabase
     .from('accessories')
     .update(cleanUpdates)
-    .eq('id', id)
+    .eq('id', cleanId)
     .select('*')
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.error('Supabase accessory update error:', error);
+    console.error('Supabase accessory update error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database update failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
   if (!data) {
-    throw new Error(`Accessory with ID "${id}" was not found in Supabase.`);
+    // If not found in table on update, check if it's an initial catalog item and upsert it with cleanUpdates
+    const baseline = INITIAL_ACCESSORIES.find(a => a.id === cleanId);
+    if (baseline) {
+      const fullRecord = {
+        ...baseline,
+        ...cleanUpdates,
+        id: cleanId,
+      };
+      return createAccessory(fullRecord);
+    }
+    throw new Error(`Accessory with ID "${cleanId}" was not found in Supabase.`);
   }
 
   return normalizeAccessory(data);
@@ -229,11 +257,17 @@ export async function deleteAccessory(id: string): Promise<boolean> {
     throw new Error('Supabase credentials are not configured. Cannot delete accessory from database.');
   }
 
+  const cleanId = String(id).trim();
   const supabase = getSupabaseAdminClient();
-  const { error } = await supabase.from('accessories').delete().eq('id', id);
+  const { error } = await supabase.from('accessories').delete().eq('id', cleanId);
 
   if (error) {
-    console.error('Supabase accessory delete error:', error);
+    console.error('Supabase accessory delete error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database delete failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
