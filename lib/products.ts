@@ -59,19 +59,24 @@ export async function getAllProducts(includeInactive = false): Promise<Product[]
     return [];
   }
 
-  const supabase = getSupabaseAdminClient();
-  let query = supabase.from('products').select('*').order('created_at', { ascending: false });
-  if (!includeInactive) {
-    query = query.eq('is_active', true);
-  }
+  try {
+    const supabase = getSupabaseAdminClient();
+    let query = supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (!includeInactive) {
+      query = query.eq('is_active', true);
+    }
 
-  const { data, error } = await query;
-  if (error) {
-    console.error('Supabase getAllProducts query error:', error);
-    throw new Error(`Failed to fetch products from Supabase: ${error.message}`);
-  }
+    const { data, error } = await query;
+    if (error) {
+      console.error('Supabase getAllProducts query error:', error.message);
+      return [];
+    }
 
-  return (data || []).map(normalizeProduct);
+    return (data || []).map(normalizeProduct);
+  } catch (err) {
+    console.error('Supabase getAllProducts unexpected error:', err);
+    return [];
+  }
 }
 
 export async function getProductByIdOrSlug(idOrSlug: string): Promise<Product | null> {
@@ -80,30 +85,35 @@ export async function getProductByIdOrSlug(idOrSlug: string): Promise<Product | 
     return null;
   }
 
-  const supabase = getSupabaseAdminClient();
-  
-  // Try querying by ID first
-  const { data: byId, error: idErr } = await supabase
-    .from('products')
-    .select('*')
-    .eq('id', idOrSlug)
-    .maybeSingle();
+  try {
+    const supabase = getSupabaseAdminClient();
+    
+    // Try querying by ID first
+    const { data: byId, error: idErr } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', idOrSlug)
+      .maybeSingle();
 
-  if (byId) return normalizeProduct(byId);
+    if (byId) return normalizeProduct(byId);
 
-  // If not found by ID, try querying by slug
-  const { data: bySlug, error: slugErr } = await supabase
-    .from('products')
-    .select('*')
-    .eq('slug', idOrSlug)
-    .maybeSingle();
+    // If not found by ID, try querying by slug
+    const { data: bySlug, error: slugErr } = await supabase
+      .from('products')
+      .select('*')
+      .eq('slug', idOrSlug)
+      .maybeSingle();
 
-  if (bySlug) return normalizeProduct(bySlug);
+    if (bySlug) return normalizeProduct(bySlug);
 
-  if (idErr) console.warn('Supabase getProduct query by ID error:', idErr);
-  if (slugErr) console.warn('Supabase getProduct query by slug error:', slugErr);
+    if (idErr) console.warn('Supabase getProduct query by ID error:', idErr.message);
+    if (slugErr) console.warn('Supabase getProduct query by slug error:', slugErr.message);
 
-  return null;
+    return null;
+  } catch (err) {
+    console.error('Supabase getProductByIdOrSlug unexpected error:', err);
+    return null;
+  }
 }
 
 export async function getFeaturedProducts(): Promise<Product[]> {

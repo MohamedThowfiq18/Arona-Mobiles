@@ -1,8 +1,8 @@
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getAllProducts } from '@/lib/products';
 import { getStoreSettings } from '@/lib/settings';
+import { DEFAULT_STORE_SETTINGS } from '@/lib/constants';
 import styles from './page.module.css';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -14,34 +14,37 @@ function formatPrice(p: number) {
 }
 
 async function getDashboardStats() {
-  const [localProducts, storeSettings] = await Promise.all([
-    getAllProducts(true),
-    getStoreSettings(),
-  ]);
-  const localActiveProducts = localProducts.filter(p => p.is_active !== false);
-  const localLowStock = localActiveProducts.filter(p => p.stock < 5 && p.stock > 0).slice(0, 10);
-
-  let activeProducts = localActiveProducts.length;
-  let lowStockCount = localLowStock.length;
+  let activeProducts = 0;
+  let activeAccessories = 0;
+  let lowStockCount = 0;
   let pendingTradeIns = 0;
   let pendingRepairs = 0;
   let totalReviews = 0;
   let activeCoupons = 0;
-  let lowStockProducts: any[] = localLowStock;
+  let lowStockProducts: any[] = [];
+  let storeSettings = DEFAULT_STORE_SETTINGS;
+
+  try {
+    storeSettings = await getStoreSettings().catch(() => DEFAULT_STORE_SETTINGS);
+  } catch {
+    storeSettings = DEFAULT_STORE_SETTINGS;
+  }
 
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
 
       const [
-        resActive,
+        resActiveProducts,
+        resActiveAccessories,
         resLowStock,
         resTradeIns,
         resRepairs,
         resReviews,
         resCoupons,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('accessories').select('*', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('products').select('*').eq('is_active', true).lt('stock', 5).gt('stock', 0).limit(10),
         supabase.from('trade_in_requests').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
         supabase.from('repair_bookings').select('*', { count: 'exact', head: true }).or('status.eq.pending,status.eq.booked'),
@@ -49,22 +52,36 @@ async function getDashboardStats() {
         supabase.from('coupons').select('*', { count: 'exact', head: true }).eq('is_active', true),
       ]);
 
-      if (resActive.count !== null && resActive.count !== undefined) activeProducts = resActive.count;
-      if (resTradeIns.count !== null && resTradeIns.count !== undefined) pendingTradeIns = resTradeIns.count;
-      if (resRepairs.count !== null && resRepairs.count !== undefined) pendingRepairs = resRepairs.count;
-      if (resReviews.count !== null && resReviews.count !== undefined) totalReviews = resReviews.count;
-      if (resCoupons.count !== null && resCoupons.count !== undefined) activeCoupons = resCoupons.count;
-      if (resLowStock.data && resLowStock.data.length > 0) {
-        lowStockProducts = resLowStock.data;
-        lowStockCount = resLowStock.data.length;
+      if (resActiveProducts.status === 'fulfilled' && resActiveProducts.value.count !== null && resActiveProducts.value.count !== undefined) {
+        activeProducts = resActiveProducts.value.count;
       }
-    } catch {
-      // fallback to local data
+      if (resActiveAccessories.status === 'fulfilled' && resActiveAccessories.value.count !== null && resActiveAccessories.value.count !== undefined) {
+        activeAccessories = resActiveAccessories.value.count;
+      }
+      if (resTradeIns.status === 'fulfilled' && resTradeIns.value.count !== null && resTradeIns.value.count !== undefined) {
+        pendingTradeIns = resTradeIns.value.count;
+      }
+      if (resRepairs.status === 'fulfilled' && resRepairs.value.count !== null && resRepairs.value.count !== undefined) {
+        pendingRepairs = resRepairs.value.count;
+      }
+      if (resReviews.status === 'fulfilled' && resReviews.value.count !== null && resReviews.value.count !== undefined) {
+        totalReviews = resReviews.value.count;
+      }
+      if (resCoupons.status === 'fulfilled' && resCoupons.value.count !== null && resCoupons.value.count !== undefined) {
+        activeCoupons = resCoupons.value.count;
+      }
+      if (resLowStock.status === 'fulfilled' && resLowStock.value.data && resLowStock.value.data.length > 0) {
+        lowStockProducts = resLowStock.value.data;
+        lowStockCount = resLowStock.value.data.length;
+      }
+    } catch (err) {
+      console.error('Owner dashboard stats query error:', err);
     }
   }
 
   return {
     activeProducts,
+    activeAccessories,
     lowStockCount,
     pendingTradeIns,
     pendingRepairs,
@@ -79,12 +96,13 @@ export default async function OwnerDashboardPage() {
   const stats = await getDashboardStats();
 
   const statCards = [
-    { label: 'Active Phones',     value: stats.activeProducts,    icon: '📱', color: '#EDE9FE', href: '/owner-portal/products' },
-    { label: 'Low Stock Alerts',  value: stats.lowStockCount,     icon: '⚠️', color: '#FEE2E2', href: '/owner-portal/products' },
-    { label: 'Pending Trade-Ins', value: stats.pendingTradeIns,   icon: '🔁', color: '#FEF3C7', href: '/owner-portal/trade-in' },
-    { label: 'Pending Repairs',   value: stats.pendingRepairs,    icon: '🔧', color: '#DBEAFE', href: '/owner-portal/repairs' },
-    { label: 'Customer Reviews',  value: stats.totalReviews,      icon: '⭐', color: '#DCFCE7', href: '/owner-portal/reviews' },
-    { label: 'Active Coupons',    value: stats.activeCoupons,     icon: '🎟️', color: '#F0FFF4', href: '/owner-portal/coupons' },
+    { label: 'Active Phones',        value: stats.activeProducts,    icon: '📱', color: '#EDE9FE', href: '/owner-portal/products' },
+    { label: 'Active Accessories',   value: stats.activeAccessories, icon: '🔌', color: '#E0F2FE', href: '/owner-portal/accessories' },
+    { label: 'Low Stock Alerts',     value: stats.lowStockCount,     icon: '⚠️', color: '#FEE2E2', href: '/owner-portal/products' },
+    { label: 'Pending Trade-Ins',    value: stats.pendingTradeIns,   icon: '🔁', color: '#FEF3C7', href: '/owner-portal/trade-in' },
+    { label: 'Pending Repairs',      value: stats.pendingRepairs,    icon: '🔧', color: '#DBEAFE', href: '/owner-portal/repairs' },
+    { label: 'Customer Reviews',     value: stats.totalReviews,      icon: '⭐', color: '#DCFCE7', href: '/owner-portal/reviews' },
+    { label: 'Active Coupons',       value: stats.activeCoupons,     icon: '🎟️', color: '#F0FFF4', href: '/owner-portal/coupons' },
   ];
 
   return (
@@ -95,12 +113,15 @@ export default async function OwnerDashboardPage() {
           <h1 className={styles.title}>Store Management Dashboard</h1>
           <p className={styles.subtitle}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <Link href="/owner-portal/settings" className="btn btn--secondary" id="manage-phones-btn">
-            📞 Owner Contact Numbers
+            📞 Owner Numbers
+          </Link>
+          <Link href="/owner-portal/accessories/add" className="btn btn--secondary">
+            🔌 + Add Accessory
           </Link>
           <Link href="/owner-portal/products/add" className="btn btn--primary" id="add-product-btn">
-            + Add New Phone
+            📱 + Add Phone
           </Link>
         </div>
       </div>
@@ -176,12 +197,12 @@ export default async function OwnerDashboardPage() {
             </div>
             <div className={styles.quickActions} style={{ marginTop: 0, gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
               {[
-                { icon: '➕', label: 'Add New Phone',   href: '/owner-portal/products/add' },
-                { icon: '📱', label: 'Manage Phones',    href: '/owner-portal/products' },
-                { icon: '📞', label: 'Phone Settings',   href: '/owner-portal/settings' },
-                { icon: '🔁', label: 'Trade-In Queue',   href: '/owner-portal/trade-in' },
-                { icon: '🔧', label: 'Repair Bookings',  href: '/owner-portal/repairs' },
-                { icon: '🎟️', label: 'Discount Coupons', href: '/owner-portal/coupons' },
+                { icon: '📱', label: 'Manage Phones',     href: '/owner-portal/products' },
+                { icon: '🔌', label: 'Manage Accessories',href: '/owner-portal/accessories' },
+                { icon: '📞', label: 'Phone Settings',    href: '/owner-portal/settings' },
+                { icon: '🔁', label: 'Trade-In Queue',    href: '/owner-portal/trade-in' },
+                { icon: '🔧', label: 'Repair Bookings',   href: '/owner-portal/repairs' },
+                { icon: '🎟️', label: 'Discount Coupons',  href: '/owner-portal/coupons' },
               ].map(a => (
                 <Link key={a.href} href={a.href} className={styles.quickAction}>
                   <span className={styles.quickIcon}>{a.icon}</span>
@@ -195,4 +216,3 @@ export default async function OwnerDashboardPage() {
     </div>
   );
 }
-

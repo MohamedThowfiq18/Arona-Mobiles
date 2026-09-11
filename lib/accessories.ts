@@ -11,19 +11,24 @@ export async function getAllAccessories(includeInactive = false): Promise<Access
     return [];
   }
 
-  const supabase = getSupabaseAdminClient();
-  let query = supabase.from('accessories').select('*').order('created_at', { ascending: false });
-  if (!includeInactive) {
-    query = query.eq('is_active', true);
-  }
+  try {
+    const supabase = getSupabaseAdminClient();
+    let query = supabase.from('accessories').select('*').order('created_at', { ascending: false });
+    if (!includeInactive) {
+      query = query.eq('is_active', true);
+    }
 
-  const { data, error } = await query;
-  if (error) {
-    console.error('Supabase getAllAccessories query error:', error);
-    throw new Error(`Failed to fetch accessories from Supabase: ${error.message}`);
-  }
+    const { data, error } = await query;
+    if (error) {
+      console.error('Supabase getAllAccessories query error:', error.message);
+      return [];
+    }
 
-  return (data || []).map(normalizeAccessory);
+    return (data || []).map(normalizeAccessory);
+  } catch (err) {
+    console.error('Supabase getAllAccessories unexpected error:', err);
+    return [];
+  }
 }
 
 export async function getAccessoryById(id: string): Promise<Accessory | null> {
@@ -32,21 +37,26 @@ export async function getAccessoryById(id: string): Promise<Accessory | null> {
     return null;
   }
 
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('accessories')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from('accessories')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-  if (error) {
-    console.error('Supabase getAccessoryById query error:', error);
-    throw new Error(`Failed to fetch accessory from Supabase: ${error.message}`);
+    if (error) {
+      console.error('Supabase getAccessoryById query error:', error.message);
+      return null;
+    }
+
+    if (data) return normalizeAccessory(data);
+
+    return null;
+  } catch (err) {
+    console.error('Supabase getAccessoryById unexpected error:', err);
+    return null;
   }
-
-  if (data) return normalizeAccessory(data);
-
-  return null;
 }
 
 export async function getFeaturedAccessories(): Promise<Accessory[]> {
