@@ -1,68 +1,52 @@
 import { randomUUID } from 'crypto';
 import type { Accessory, AccessoryCategory } from '@/lib/types';
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
-import { INITIAL_ACCESSORY_CATEGORIES, INITIAL_ACCESSORIES, normalizeAccessory } from '@/lib/accessory-constants';
+import { INITIAL_ACCESSORY_CATEGORIES, normalizeAccessory } from '@/lib/accessory-constants';
 
-export { INITIAL_ACCESSORY_CATEGORIES, INITIAL_ACCESSORIES, normalizeAccessory };
+export { INITIAL_ACCESSORY_CATEGORIES, normalizeAccessory };
 
 export async function getAllAccessories(includeInactive = false): Promise<Accessory[]> {
   if (!isSupabaseConfigured()) {
-    return includeInactive ? INITIAL_ACCESSORIES : INITIAL_ACCESSORIES.filter(a => a.is_active);
+    console.warn('Supabase is not configured on server.');
+    return [];
   }
 
-  try {
-    const supabase = getSupabaseAdminClient();
-    let query = supabase.from('accessories').select('*').order('created_at', { ascending: false });
-    if (!includeInactive) {
-      query = query.eq('is_active', true);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      // If table doesn't exist yet or has error, gracefully fall back to initial data
-      console.warn('Supabase getAllAccessories error, using initial dataset:', error.message);
-      return includeInactive ? INITIAL_ACCESSORIES : INITIAL_ACCESSORIES.filter(a => a.is_active);
-    }
-
-    if (!data || data.length === 0) {
-      return includeInactive ? INITIAL_ACCESSORIES : INITIAL_ACCESSORIES.filter(a => a.is_active);
-    }
-
-    return data.map(normalizeAccessory);
-  } catch (err) {
-    console.warn('Error fetching accessories from Supabase:', err);
-    return includeInactive ? INITIAL_ACCESSORIES : INITIAL_ACCESSORIES.filter(a => a.is_active);
+  const supabase = getSupabaseAdminClient();
+  let query = supabase.from('accessories').select('*').order('created_at', { ascending: false });
+  if (!includeInactive) {
+    query = query.eq('is_active', true);
   }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Supabase getAllAccessories query error:', error);
+    throw new Error(`Failed to fetch accessories from Supabase: ${error.message}`);
+  }
+
+  return (data || []).map(normalizeAccessory);
 }
 
 export async function getAccessoryById(id: string): Promise<Accessory | null> {
   if (!isSupabaseConfigured()) {
-    const found = INITIAL_ACCESSORIES.find(a => a.id === id);
-    return found ? normalizeAccessory(found) : null;
+    console.warn('Supabase is not configured on server.');
+    return null;
   }
 
-  try {
-    const supabase = getSupabaseAdminClient();
-    const { data, error } = await supabase
-      .from('accessories')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('accessories')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
-    if (data) return normalizeAccessory(data);
-
-    if (error) {
-      console.warn('Supabase getAccessoryById error:', error.message);
-    }
-
-    // Check in initial accessories
-    const fallback = INITIAL_ACCESSORIES.find(a => a.id === id);
-    return fallback ? normalizeAccessory(fallback) : null;
-  } catch (err) {
-    console.warn('Error fetching accessory by ID from Supabase:', err);
-    const fallback = INITIAL_ACCESSORIES.find(a => a.id === id);
-    return fallback ? normalizeAccessory(fallback) : null;
+  if (error) {
+    console.error('Supabase getAccessoryById query error:', error);
+    throw new Error(`Failed to fetch accessory from Supabase: ${error.message}`);
   }
+
+  if (data) return normalizeAccessory(data);
+
+  return null;
 }
 
 export async function getFeaturedAccessories(): Promise<Accessory[]> {
@@ -94,7 +78,7 @@ export async function getAccessoryCategories(): Promise<AccessoryCategory[]> {
 
 export async function createAccessory(accessoryData: Partial<Accessory>): Promise<Accessory> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase credentials are not configured. Cannot save accessory.');
+    throw new Error('Supabase credentials are not configured. Cannot save accessory to database.');
   }
 
   const id = accessoryData.id && String(accessoryData.id).trim().length > 0
@@ -106,12 +90,16 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
   const imgList = accessoryData.images && accessoryData.images.length > 0 ? accessoryData.images : (primaryImg ? [primaryImg] : []);
 
   const price = Number(accessoryData.price) || 0;
-  const originalPrice = accessoryData.original_price !== undefined && accessoryData.original_price !== null ? Number(accessoryData.original_price) : undefined;
-  const discountPrice = accessoryData.discount_price !== undefined && accessoryData.discount_price !== null ? Number(accessoryData.discount_price) : undefined;
-  const discountPercent = originalPrice && originalPrice > price 
-    ? Math.round(((originalPrice - price) / originalPrice) * 100) 
+  const originalPrice = accessoryData.original_price !== undefined && accessoryData.original_price !== null && String(accessoryData.original_price).trim() !== ''
+    ? Number(accessoryData.original_price)
+    : undefined;
+  const discountPrice = accessoryData.discount_price !== undefined && accessoryData.discount_price !== null && String(accessoryData.discount_price).trim() !== ''
+    ? Number(accessoryData.discount_price)
+    : undefined;
+  const discountPercent = originalPrice && originalPrice > price
+    ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : (accessoryData.discount_percent || 0);
-  
+
   const stock = Number(accessoryData.stock) || 0;
   const isActive = accessoryData.is_active ?? accessoryData.published ?? true;
   const isFeatured = Boolean(accessoryData.is_featured);
@@ -155,12 +143,7 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
     .single();
 
   if (error) {
-    console.error('Supabase accessory insert error:', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    console.error('Supabase accessory insert error:', error);
     throw new Error(`Database insert failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
@@ -169,7 +152,7 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
 
 export async function updateAccessory(id: string, updates: Partial<Accessory>): Promise<Accessory> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase credentials are not configured. Cannot update accessory.');
+    throw new Error('Supabase credentials are not configured. Cannot update accessory in database.');
   }
 
   const primaryImg = updates.image_url || (updates.images && updates.images[0]);
@@ -177,7 +160,6 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
   const isActive = updates.is_active !== undefined ? updates.is_active : (updates.published !== undefined ? updates.published : undefined);
   const isFeatured = updates.is_featured !== undefined ? updates.is_featured : undefined;
 
-  // Strict whitelist of valid table columns to prevent PostgreSQL 42703 (undefined column) error
   const cleanUpdates: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
@@ -218,27 +200,15 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
     .update(cleanUpdates)
     .eq('id', id)
     .select('*')
-    .maybeSingle();
+    .single();
 
   if (error) {
-    console.error('Supabase accessory update error:', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    console.error('Supabase accessory update error:', error);
     throw new Error(`Database update failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
-  // If the record was not yet in the Supabase table (e.g. editing an initial seed accessory), insert it
   if (!data) {
-    const baseline = INITIAL_ACCESSORIES.find(a => a.id === id);
-    const fullPayload = {
-      ...(baseline || {}),
-      id,
-      ...cleanUpdates,
-    };
-    return createAccessory(fullPayload);
+    throw new Error(`Accessory with ID "${id}" was not found in Supabase.`);
   }
 
   return normalizeAccessory(data);
@@ -246,19 +216,14 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
 
 export async function deleteAccessory(id: string): Promise<boolean> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase credentials are not configured. Cannot delete accessory.');
+    throw new Error('Supabase credentials are not configured. Cannot delete accessory from database.');
   }
 
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from('accessories').delete().eq('id', id);
 
   if (error) {
-    console.error('Supabase accessory delete error:', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    console.error('Supabase accessory delete error:', error);
     throw new Error(`Database delete failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 

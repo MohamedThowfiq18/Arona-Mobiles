@@ -104,11 +104,11 @@ export default function OwnerAccessoriesManager({ initialAccessories, categories
         body: JSON.stringify({ is_active: nextState }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status');
+      if (!res.ok) throw new Error(data.error || 'Failed to update accessory status');
       setAccessories(prev => prev.map(a => a.id === accessory.id ? { ...a, is_active: nextState } : a));
       showToast({ type: 'success', title: `${accessory.name} ${nextState ? 'published' : 'unpublished'}` });
     } catch (err: any) {
-      showToast({ type: 'error', title: 'Could not update status', message: err?.message || 'Please try again.' });
+      showToast({ type: 'error', title: 'Could not update status', message: err?.message || 'Database update failed.' });
     } finally {
       setToggling(null);
     }
@@ -122,7 +122,7 @@ export default function OwnerAccessoriesManager({ initialAccessories, categories
         method: 'DELETE',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
+      if (!res.ok) {
         throw new Error(data.error || 'Failed to delete accessory from database');
       }
       setAccessories(prev => prev.filter(a => a.id !== accessory.id));
@@ -189,6 +189,7 @@ export default function OwnerAccessoriesManager({ initialAccessories, categories
           placeholder="Search by accessory name, brand, category..."
           value={search}
           onChange={e => setSearch(e.target.value)}
+          id="accessory-search"
         />
         <select
           className="form-input form-select"
