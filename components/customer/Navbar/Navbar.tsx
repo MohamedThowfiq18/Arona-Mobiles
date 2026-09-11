@@ -201,10 +201,11 @@ export default function Navbar() {
             {showCategoryMenu && (
               <div className={styles.categoryDropdown}>
                 <div className={styles.dropdownSection}>
-                  <div className={styles.dropdownTitle}>CATEGORIES</div>
+                  <div className={styles.dropdownTitle}>CATEGORIES & SERVICES</div>
                   {CATEGORIES.map(c => (
                     <Link key={c.href} href={c.href} className={styles.dropdownItem}>{c.label}</Link>
                   ))}
+                  <Link href="/repair/status" className={styles.dropdownItem} style={{ color: 'var(--color-accent)', fontWeight: 600 }}>🔍 Track Repair Status</Link>
                 </div>
                 <div className={styles.dropdownSection}>
                   <div className={styles.dropdownTitle}>BRANDS</div>
@@ -266,6 +267,9 @@ export default function Navbar() {
           {CATEGORIES.map(c => (
             <Link key={c.href} href={c.href} className={styles.mobileMenuItem}>{c.label}</Link>
           ))}
+          <Link href="/repair/status" className={styles.mobileMenuItem} style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
+            🔍 Track Repair Status
+          </Link>
           <hr className="divider" />
           {BRANDS.map(b => (
             <Link key={b.href} href={b.href} className={styles.mobileMenuItem}>{b.label}</Link>

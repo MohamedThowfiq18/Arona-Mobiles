@@ -174,9 +174,12 @@ export default function RepairPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-          <Link href="/" className="btn btn--primary btn--lg">
-            Back to Home
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Link
+            href={`/repair/status?id=${encodeURIComponent(submittedData.id)}&phone=${encodeURIComponent(submittedData.customerPhone)}`}
+            className="btn btn--primary btn--lg"
+          >
+            🔍 Check Repair Status
           </Link>
           <button
             type="button"
@@ -190,6 +193,9 @@ export default function RepairPage() {
           >
             Book Another Repair
           </button>
+          <Link href="/" className="btn btn--secondary btn--lg">
+            Back to Home
+          </Link>
         </div>
       </div>
     );
@@ -199,6 +205,12 @@ export default function RepairPage() {
     <div className={styles.page}>
       <div className={styles.hero}>
         <div className="container">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '16px', background: 'var(--color-bg-subtle, #F3F4F6)', padding: '6px 14px', borderRadius: '9999px', fontSize: '13px', fontWeight: 600 }}>
+            <span>Already booked?</span>
+            <Link href="/repair/status" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
+              Check Repair Status →
+            </Link>
+          </div>
           <h1 className={styles.title}>Expert Mobile Repair &amp; Service</h1>
           <p className={styles.sub}>
             Fast, reliable phone repairs with 100% genuine parts &amp; 3-month store warranty.
