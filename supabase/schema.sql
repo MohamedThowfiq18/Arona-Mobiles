@@ -276,13 +276,21 @@ CREATE INDEX IF NOT EXISTS idx_tradein_status ON public.trade_in_requests(status
 CREATE TABLE IF NOT EXISTS public.repair_bookings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  customer_name TEXT,
+  customer_phone TEXT,
+  phone_brand TEXT,
+  phone_model TEXT,
+  issue_description TEXT,
   service_type TEXT NOT NULL,                            -- Screen replacement, Battery, etc.
-  device_info JSONB NOT NULL DEFAULT '{}'::JSONB,
+  service_price NUMERIC(10,2),
+  preferred_date_time TIMESTAMPTZ,
   scheduled_slot TIMESTAMPTZ,
-  status TEXT NOT NULL DEFAULT 'booked'
-    CHECK (status IN ('booked','in_progress','completed','cancelled')),
+  device_info JSONB NOT NULL DEFAULT '{}'::JSONB,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','confirmed','in_progress','completed','cancelled','booked','repaired','delivered')),
   estimated_cost NUMERIC(10,2),
   final_cost NUMERIC(10,2),
+  notes TEXT,
   technician_notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -290,6 +298,8 @@ CREATE TABLE IF NOT EXISTS public.repair_bookings (
 
 CREATE INDEX IF NOT EXISTS idx_repair_user ON public.repair_bookings(user_id);
 CREATE INDEX IF NOT EXISTS idx_repair_status ON public.repair_bookings(status);
+CREATE INDEX IF NOT EXISTS idx_repair_created_at ON public.repair_bookings(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_repair_pref_date ON public.repair_bookings(preferred_date_time);
 
 -- ============================================================
 -- REVIEWS

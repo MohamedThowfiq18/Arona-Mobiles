@@ -44,7 +44,7 @@ async function getDashboardStats() {
         supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('products').select('*').eq('is_active', true).lt('stock', 5).gt('stock', 0).limit(10),
         supabase.from('trade_in_requests').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
-        supabase.from('repair_bookings').select('*', { count: 'exact', head: true }).eq('status', 'booked'),
+        supabase.from('repair_bookings').select('*', { count: 'exact', head: true }).or('status.eq.pending,status.eq.booked'),
         supabase.from('reviews').select('*', { count: 'exact', head: true }),
         supabase.from('coupons').select('*', { count: 'exact', head: true }).eq('is_active', true),
       ]);

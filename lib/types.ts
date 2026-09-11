@@ -212,17 +212,26 @@ export interface TradeInRequest {
 export interface RepairBooking {
   id: string;
   user_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  phone_brand?: string;
+  phone_model?: string;
+  issue_description?: string;
   service_type: string;
-  device_info: {
-    brand: string;
-    model: string;
+  service_price?: number;
+  preferred_date_time?: string;
+  device_info?: {
+    brand?: string;
+    model?: string;
     imei?: string;
     issue_description?: string;
+    issue?: string;
   };
   scheduled_slot?: string;
-  status: 'booked' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'booked' | 'repaired' | 'delivered';
   estimated_cost?: number;
   final_cost?: number;
+  notes?: string;
   technician_notes?: string;
   created_at: string;
   updated_at: string;
