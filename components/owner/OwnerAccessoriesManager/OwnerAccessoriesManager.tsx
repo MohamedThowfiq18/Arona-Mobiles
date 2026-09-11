@@ -103,28 +103,37 @@ export default function OwnerAccessoriesManager({ initialAccessories, categories
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: nextState }),
       });
-      if (!res.ok) throw new Error('Failed to update status');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status');
       setAccessories(prev => prev.map(a => a.id === accessory.id ? { ...a, is_active: nextState } : a));
       showToast({ type: 'success', title: `${accessory.name} ${nextState ? 'published' : 'unpublished'}` });
-    } catch {
-      showToast({ type: 'error', title: 'Could not update status' });
+    } catch (err: any) {
+      showToast({ type: 'error', title: 'Could not update status', message: err?.message || 'Please try again.' });
     } finally {
       setToggling(null);
     }
   };
 
   const deleteAccessory = async (accessory: Accessory) => {
-    if (!confirm(`Delete "${accessory.name}"? This will permanently remove it.`)) return;
+    if (!confirm(`Are you sure you want to delete this accessory?\n\n${accessory.name}`)) return;
     setDeleting(accessory.id);
     try {
       const res = await fetch(`/api/owner/accessories/${accessory.id}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error('Failed to delete accessory');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete accessory from database');
+      }
       setAccessories(prev => prev.filter(a => a.id !== accessory.id));
-      showToast({ type: 'success', title: 'Accessory deleted' });
-    } catch {
-      showToast({ type: 'error', title: 'Could not delete accessory' });
+      showToast({ type: 'success', title: 'Accessory deleted successfully' });
+    } catch (err: any) {
+      console.error('Delete accessory error:', err);
+      showToast({
+        type: 'error',
+        title: 'Could not delete accessory',
+        message: err?.message || 'Failed to delete from Supabase.',
+      });
     } finally {
       setDeleting(null);
     }

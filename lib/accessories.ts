@@ -106,8 +106,8 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
   const imgList = accessoryData.images && accessoryData.images.length > 0 ? accessoryData.images : (primaryImg ? [primaryImg] : []);
 
   const price = Number(accessoryData.price) || 0;
-  const originalPrice = accessoryData.original_price !== undefined ? Number(accessoryData.original_price) : undefined;
-  const discountPrice = accessoryData.discount_price !== undefined ? Number(accessoryData.discount_price) : undefined;
+  const originalPrice = accessoryData.original_price !== undefined && accessoryData.original_price !== null ? Number(accessoryData.original_price) : undefined;
+  const discountPrice = accessoryData.discount_price !== undefined && accessoryData.discount_price !== null ? Number(accessoryData.discount_price) : undefined;
   const discountPercent = originalPrice && originalPrice > price 
     ? Math.round(((originalPrice - price) / originalPrice) * 100) 
     : (accessoryData.discount_percent || 0);
@@ -155,7 +155,12 @@ export async function createAccessory(accessoryData: Partial<Accessory>): Promis
     .single();
 
   if (error) {
-    console.error('Supabase accessory insert error:', error);
+    console.error('Supabase accessory insert error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database insert failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
@@ -172,36 +177,68 @@ export async function updateAccessory(id: string, updates: Partial<Accessory>): 
   const isActive = updates.is_active !== undefined ? updates.is_active : (updates.published !== undefined ? updates.published : undefined);
   const isFeatured = updates.is_featured !== undefined ? updates.is_featured : undefined;
 
-  const normalizedUpdates: Record<string, any> = {
-    ...updates,
-    ...(primaryImg ? { image_url: primaryImg } : {}),
-    ...(imgList ? { images: imgList } : {}),
-    ...(updates.price !== undefined ? { price: Number(updates.price) } : {}),
-    ...(updates.original_price !== undefined ? { original_price: updates.original_price ? Number(updates.original_price) : null } : {}),
-    ...(updates.discount_price !== undefined ? { discount_price: updates.discount_price ? Number(updates.discount_price) : null } : {}),
-    ...(updates.discount_percent !== undefined ? { discount_percent: Number(updates.discount_percent) } : {}),
-    ...(updates.stock !== undefined ? { stock: Number(updates.stock) } : {}),
-    ...(isActive !== undefined ? { is_active: isActive, published: isActive } : {}),
-    ...(isFeatured !== undefined ? { is_featured: isFeatured } : {}),
-    ...(updates.stock !== undefined && isActive !== undefined ? { available: Number(updates.stock) > 0 && isActive } : {}),
+  // Strict whitelist of valid table columns to prevent PostgreSQL 42703 (undefined column) error
+  const cleanUpdates: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
+
+  if (updates.name !== undefined) cleanUpdates.name = String(updates.name).trim();
+  if (updates.brand !== undefined) cleanUpdates.brand = String(updates.brand).trim();
+  if (updates.category !== undefined) cleanUpdates.category = String(updates.category).trim();
+  if (updates.subcategory !== undefined) cleanUpdates.subcategory = updates.subcategory ? String(updates.subcategory).trim() : null;
+  if (updates.model_sku !== undefined) cleanUpdates.model_sku = updates.model_sku ? String(updates.model_sku).trim() : null;
+  if (updates.color !== undefined) cleanUpdates.color = updates.color ? String(updates.color).trim() : null;
+  if (updates.compatibility !== undefined) cleanUpdates.compatibility = updates.compatibility ? String(updates.compatibility).trim() : null;
+  if (updates.description !== undefined) cleanUpdates.description = updates.description ? String(updates.description).trim() : null;
+  if (updates.offer !== undefined) cleanUpdates.offer = updates.offer ? String(updates.offer).trim() : null;
+  if (updates.specs !== undefined) cleanUpdates.specs = updates.specs;
+  if (primaryImg) cleanUpdates.image_url = primaryImg;
+  if (imgList) cleanUpdates.images = imgList;
+  if (updates.tags !== undefined) cleanUpdates.tags = updates.tags;
+
+  if (updates.price !== undefined) cleanUpdates.price = Number(updates.price);
+  if (updates.original_price !== undefined) cleanUpdates.original_price = updates.original_price ? Number(updates.original_price) : null;
+  if (updates.discount_price !== undefined) cleanUpdates.discount_price = updates.discount_price ? Number(updates.discount_price) : null;
+  if (updates.discount_percent !== undefined) cleanUpdates.discount_percent = Number(updates.discount_percent);
+  if (updates.stock !== undefined) cleanUpdates.stock = Number(updates.stock);
+  if (isActive !== undefined) {
+    cleanUpdates.is_active = isActive;
+    cleanUpdates.published = isActive;
+  }
+  if (isFeatured !== undefined) cleanUpdates.is_featured = isFeatured;
+  if (updates.stock !== undefined || isActive !== undefined) {
+    const stockVal = updates.stock !== undefined ? Number(updates.stock) : 1;
+    const activeVal = isActive !== undefined ? isActive : true;
+    cleanUpdates.available = stockVal > 0 && activeVal;
+  }
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('accessories')
-    .update(normalizedUpdates)
+    .update(cleanUpdates)
     .eq('id', id)
     .select('*')
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.error('Supabase accessory update error:', error);
+    console.error('Supabase accessory update error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database update failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
+  // If the record was not yet in the Supabase table (e.g. editing an initial seed accessory), insert it
   if (!data) {
-    throw new Error(`Accessory with ID "${id}" was not found in Supabase.`);
+    const baseline = INITIAL_ACCESSORIES.find(a => a.id === id);
+    const fullPayload = {
+      ...(baseline || {}),
+      id,
+      ...cleanUpdates,
+    };
+    return createAccessory(fullPayload);
   }
 
   return normalizeAccessory(data);
@@ -216,7 +253,12 @@ export async function deleteAccessory(id: string): Promise<boolean> {
   const { error } = await supabase.from('accessories').delete().eq('id', id);
 
   if (error) {
-    console.error('Supabase accessory delete error:', error);
+    console.error('Supabase accessory delete error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     throw new Error(`Database delete failed: ${error.message} (${error.code || 'UNKNOWN'})`);
   }
 
