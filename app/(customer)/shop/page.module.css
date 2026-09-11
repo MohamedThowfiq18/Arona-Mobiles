@@ -77,13 +77,16 @@
 /* ── Grid ── */
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+  width: 100%;
 }
 
-@media (max-width: 360px)  { .grid { grid-template-columns: 1fr; } }
-@media (min-width: 640px)  { .grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1100px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 340px)  { .grid { grid-template-columns: 1fr; } }
+@media (min-width: 640px)  { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 900px)  { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 1200px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 1600px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-5); } }
 
 /* ── Empty ── */
 .empty {

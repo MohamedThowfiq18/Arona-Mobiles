@@ -5,6 +5,8 @@ import type { Product } from '@/lib/types';
 import ProductCard from '@/components/customer/ProductCard/ProductCard';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
+import styles from './RealtimeProductGrid.module.css';
+
 interface Props {
   initialProducts: Product[];
   filterCondition?: 'new' | 'pre-owned';
@@ -162,8 +164,10 @@ export default function RealtimeProductGrid({
     );
   }
 
+  const combinedClass = className ? `${styles.grid} ${className}` : styles.grid;
+
   return (
-    <div className={className}>
+    <div className={combinedClass}>
       {displayed.map(p => (
         <ProductCard key={p.id} product={p} />
       ))}

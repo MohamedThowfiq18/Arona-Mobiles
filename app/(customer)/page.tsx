@@ -71,7 +71,7 @@ export default async function HomePage() {
                 <a href="/certified-preowned" className="btn btn--secondary">Learn More →</a>
               </div>
               <div className={styles.preOwnedProducts}>
-                <RealtimeProductGrid initialProducts={preOwned} filterCondition="pre-owned" limit={6} />
+                <RealtimeProductGrid initialProducts={preOwned} filterCondition="pre-owned" limit={6} className={styles.preOwnedGrid} />
               </div>
             </div>
           </div>

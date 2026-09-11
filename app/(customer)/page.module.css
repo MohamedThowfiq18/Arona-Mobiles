@@ -1,13 +1,14 @@
 .productGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+  width: 100%;
 }
 
-@media (max-width: 360px)  { .productGrid { grid-template-columns: 1fr; } }
-@media (min-width: 640px)  { .productGrid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 900px)  { .productGrid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1200px) { .productGrid { grid-template-columns: repeat(5, 1fr); } }
+@media (max-width: 340px)  { .productGrid { grid-template-columns: 1fr; } }
+@media (min-width: 640px)  { .productGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 1024px) { .productGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); } }
+@media (min-width: 1600px) { .productGrid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-5); } }
 
 /* ── Section header ── */
 .sectionHeader {
@@ -73,13 +74,16 @@
 /* ── Pre-owned section ── */
 .preOwnedBanner {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: var(--space-8);
+  grid-template-columns: 280px 1fr;
+  gap: var(--space-6);
   align-items: start;
 }
 
 @media (max-width: 900px) {
-  .preOwnedBanner { grid-template-columns: 1fr; }
+  .preOwnedBanner {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+  }
 }
 
 .preOwnedText {
@@ -121,19 +125,41 @@
 }
 
 .preOwnedProducts {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
 }
 
-@media (max-width: 360px) {
-  .preOwnedProducts {
+.preOwnedGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+@media (max-width: 340px) {
+  .preOwnedGrid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (min-width: 640px) {
-  .preOwnedProducts { grid-template-columns: repeat(4, 1fr); }
+  .preOwnedGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+@media (min-width: 1200px) {
+  .preOwnedGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+@media (min-width: 1600px) {
+  .preOwnedGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 /* ── Trust grid ── */

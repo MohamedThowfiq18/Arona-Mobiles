@@ -74,6 +74,7 @@ export default async function CertifiedPreOwnedPage() {
             <RealtimeProductGrid
               initialProducts={products}
               filterCondition="pre-owned"
+              className={styles.productGrid}
               emptyMessage="No certified pre-owned phones in stock right now. Please check back soon or contact store!"
             />
           </div>
