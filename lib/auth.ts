@@ -496,12 +496,14 @@ export async function revokeAllOtherOwnerSessions(
 /**
  * Invalidate all active sessions for a specific owner (e.g. on password reset)
  */
-export function invalidateOwnerSessions(ownerId: string, phone?: string): void {
+export async function invalidateOwnerSessions(ownerId: string, phone?: string): Promise<void> {
   bumpSessionVersion(ownerId);
+  const now = new Date().toISOString();
+  const nowMs = Date.now();
+
   if (phone) {
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
     bumpSessionVersion(cleanPhone);
-    const nowMs = Date.now();
     deviceSessionsStore.forEach(s => {
       if (s.phone === cleanPhone) {
         s.isRevoked = true;
@@ -512,11 +514,29 @@ export function invalidateOwnerSessions(ownerId: string, phone?: string): void {
     if (isSupabaseConfigured()) {
       try {
         const supabase = getSupabaseAdminClient();
-        supabase
+        await supabase
           .from('owner_sessions')
-          .update({ is_revoked: true, revoked_at: new Date().toISOString() })
-          .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`)
-          .then();
+          .update({ is_revoked: true, revoked_at: now })
+          .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+      } catch {
+        // ignore
+      }
+    }
+  } else {
+    deviceSessionsStore.forEach(s => {
+      if (s.ownerId === ownerId) {
+        s.isRevoked = true;
+        s.revokedAt = nowMs;
+      }
+    });
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdminClient();
+        await supabase
+          .from('owner_sessions')
+          .update({ is_revoked: true, revoked_at: now })
+          .eq('owner_id', ownerId);
       } catch {
         // ignore
       }
@@ -676,9 +696,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 import { getSupabaseAdminClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { STORE_CONFIG } from '@/lib/constants';
+import { getStoreSettings } from '@/lib/settings';
 
 /**
- * Retrieve owner credential record from Supabase PostgreSQL (Single source of truth)
+ * Retrieve owner credential record from Supabase PostgreSQL (Single source of truth across all devices)
  */
 export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord | null> {
   const cleanPhone = phone.replace(/\D/g, '').slice(-10);
@@ -688,13 +709,12 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      
+
       // Step A: Search for exact phone match (or +91 / 91 variations)
       const { data, error } = await supabase
         .from('owners')
         .select('*')
         .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`)
-        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -720,13 +740,18 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
         return record;
       }
 
-      // Step B: If no record found for this specific phone, but this phone is authorized,
-      // fetch the single global store owner password record
-      if (STORE_CONFIG.authorizedOwnerPhones.includes(cleanPhone)) {
+      // Step B: If no record found for this specific phone, check if this phone is an authorized owner number.
+      // If authorized, fetch the single global store owner password record from any registered owner row.
+      const storeSettings = await getStoreSettings().catch(() => ({ authorized_owner_phones: [] }));
+      const authorizedList = [
+        ...STORE_CONFIG.authorizedOwnerPhones,
+        ...(storeSettings.authorized_owner_phones || []),
+      ].map(p => p.replace(/\D/g, '').slice(-10));
+
+      if (authorizedList.includes(cleanPhone)) {
         const { data: globalData, error: globalErr } = await supabase
           .from('owners')
           .select('*')
-          .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -746,6 +771,20 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
 
           inMemoryOwnerStore.set(cleanPhone, record);
           inMemoryOwnerStore.set('global_owner', record);
+
+          // Asynchronously ensure a dedicated row for this phone exists in DB
+          Promise.resolve(
+            supabase
+              .from('owners')
+              .upsert({
+                phone: cleanPhone,
+                password_hash: globalData.password_hash,
+                otp_verified: true,
+                failed_login_attempts: 0,
+                locked_until: null,
+              }, { onConflict: 'phone' })
+          ).catch(() => {});
+
           return record;
         }
       }
@@ -759,7 +798,7 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
     inMemoryOwnerStore.get(cleanPhone) ||
     inMemoryOwnerStore.get(`owner-${cleanPhone}`) ||
     inMemoryOwnerStore.get('global_owner');
-    
+
   if (cached) {
     return cached;
   }
@@ -769,7 +808,7 @@ export async function getOwnerRecord(phone: string): Promise<OwnerAccountRecord 
 
 /**
  * Persist new password hash globally to both Supabase PostgreSQL and server store,
- * and bump session versions to invalidate all older sessions across devices.
+ * and bump session versions / revoke existing active sessions across all devices.
  */
 export async function saveOwnerPassword(
   phone: string,
@@ -779,18 +818,24 @@ export async function saveOwnerPassword(
   const now = new Date().toISOString();
   const ownerId = `owner-${cleanPhone}`;
 
-  // 1. Bump session versions for cross-device session invalidation
+  // Gather all authorized owner numbers
+  const storeSettings = await getStoreSettings().catch(() => ({ authorized_owner_phones: [] }));
   const allAuthorizedPhones = Array.from(new Set([
     cleanPhone,
     ...STORE_CONFIG.authorizedOwnerPhones,
-  ]));
+    ...(storeSettings.authorized_owner_phones || []),
+  ])).map(p => p.replace(/\D/g, '').slice(-10)).filter(Boolean);
 
-  let nextVersion = 1;
+  // 1. Invalidate in-memory sessions
+  const nowMs = Date.now();
+  deviceSessionsStore.forEach(s => {
+    s.isRevoked = true;
+    s.revokedAt = nowMs;
+  });
+
   for (const p of allAuthorizedPhones) {
-    const v = bumpSessionVersion(p);
+    bumpSessionVersion(p);
     bumpSessionVersion(`owner-${p}`);
-    nextVersion = Math.max(nextVersion, v);
-    invalidateOwnerSessions(`owner-${p}`, p);
   }
 
   // 2. Store in memory immediately across all authorized numbers & global_owner
@@ -802,7 +847,6 @@ export async function saveOwnerPassword(
     otp_verified: true,
     failed_login_attempts: 0,
     locked_until: null,
-    session_version: nextVersion,
     password_updated_at: now,
   };
 
@@ -812,71 +856,106 @@ export async function saveOwnerPassword(
   }
   inMemoryOwnerStore.set('global_owner', updatedRecord);
 
-  // 3. Persist to Supabase PostgreSQL (Single source of truth for all devices)
+  // 3. Persist to Supabase PostgreSQL (Single global source of truth across all devices)
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
 
-      // Check for existing owner record(s)
-      const { data: existingRows } = await supabase
-        .from('owners')
-        .select('id, phone, session_version');
+      // Revoke all existing sessions across all devices in Supabase
+      try {
+        await supabase
+          .from('owner_sessions')
+          .update({ is_revoked: true, revoked_at: now })
+          .eq('is_revoked', false);
+      } catch (sessErr: any) {
+        console.warn('[Auth] Session revocation notice:', sessErr?.message);
+      }
 
-      if (existingRows && existingRows.length > 0) {
-        // Update ALL existing owner rows to have the same global password hash
+      // Check existing owner records
+      const { data: existingRows, error: selectErr } = await supabase
+        .from('owners')
+        .select('id, phone');
+
+      if (!selectErr && existingRows && existingRows.length > 0) {
+        // Update ALL existing owner rows with the new global password hash
+        const fullPayload = {
+          password_hash: passwordHash,
+          otp_verified: true,
+          failed_login_attempts: 0,
+          locked_until: null,
+          password_updated_at: now,
+          updated_at: now,
+        };
+
         const { error: updateErr } = await supabase
           .from('owners')
-          .update({
-            password_hash: passwordHash,
-            otp_verified: true,
-            failed_login_attempts: 0,
-            locked_until: null,
-            password_updated_at: now,
-            session_version: nextVersion,
-            updated_at: now,
-          })
+          .update(fullPayload)
           .in('id', existingRows.map(r => r.id));
 
         if (updateErr) {
-          console.warn('[Auth] Full DB update error, falling back to core columns:', updateErr.message);
-          await supabase
+          console.warn('[Auth] Full DB update fallback:', updateErr.message);
+          const { error: coreErr } = await supabase
             .from('owners')
             .update({
               password_hash: passwordHash,
               otp_verified: true,
               failed_login_attempts: 0,
               locked_until: null,
-              updated_at: now,
             })
             .in('id', existingRows.map(r => r.id));
+
+          if (coreErr) {
+            await supabase
+              .from('owners')
+              .update({ password_hash: passwordHash })
+              .in('id', existingRows.map(r => r.id));
+          }
+        }
+
+        // Upsert any authorized phone numbers that don't have a row yet
+        const existingPhones = new Set(existingRows.map(r => r.phone?.replace(/\D/g, '').slice(-10)));
+        for (const p of allAuthorizedPhones) {
+          if (!existingPhones.has(p)) {
+            try {
+              await supabase
+                .from('owners')
+                .upsert({
+                  phone: p,
+                  password_hash: passwordHash,
+                  otp_verified: true,
+                  failed_login_attempts: 0,
+                  locked_until: null,
+                }, { onConflict: 'phone' });
+            } catch {
+              // ignore
+            }
+          }
         }
       } else {
-        // No row existed yet -> Insert initial owner record
-        const { error: insertErr } = await supabase
-          .from('owners')
-          .insert({
-            phone: cleanPhone,
-            password_hash: passwordHash,
-            otp_verified: true,
-            failed_login_attempts: 0,
-            locked_until: null,
-            password_updated_at: now,
-            session_version: nextVersion,
-            created_at: now,
-            updated_at: now,
-          });
-
-        if (insertErr) {
-          console.warn('[Auth] Full DB insert error, falling back to core columns:', insertErr.message);
-          await supabase
-            .from('owners')
-            .insert({
-              phone: cleanPhone,
-              password_hash: passwordHash,
-              otp_verified: true,
-              failed_login_attempts: 0,
-              locked_until: null,
-            });
+        // No rows existed yet -> Upsert all authorized owner rows
+        for (const p of allAuthorizedPhones) {
+          try {
+            await supabase
+              .from('owners')
+              .upsert({
+                phone: p,
+                password_hash: passwordHash,
+                otp_verified: true,
+                failed_login_attempts: 0,
+                locked_until: null,
+              }, { onConflict: 'phone' });
+          } catch (upsertErr: any) {
+            console.warn('[Auth] Upsert fallback on empty owners table:', upsertErr?.message);
+            await supabase
+              .from('owners')
+              .insert({
+                phone: p,
+                password_hash: passwordHash,
+                otp_verified: true,
+                failed_login_attempts: 0,
+                locked_until: null,
+              });
+          }
         }
       }
 
@@ -912,7 +991,7 @@ export async function recordOwnerLoginSuccess(
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
-      await supabase
+      const { error } = await supabase
         .from('owners')
         .update({
           failed_login_attempts: 0,
@@ -921,7 +1000,18 @@ export async function recordOwnerLoginSuccess(
           last_login_device: deviceSummary,
           updated_at: now,
         })
-        .or(`phone.eq.${cleanPhone},id.eq.${ownerId}`);
+        .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+
+      if (error) {
+        // Fallback for minimal schema
+        await supabase
+          .from('owners')
+          .update({
+            failed_login_attempts: 0,
+            locked_until: null,
+          })
+          .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+      }
     } catch {
       // ignore
     }
@@ -957,9 +1047,8 @@ export async function recordOwnerFailedAttempt(
         .update({
           failed_login_attempts: currentAttempts,
           ...(lockedUntil ? { locked_until: lockedUntil.toISOString() } : {}),
-          updated_at: new Date().toISOString(),
         })
-        .or(`phone.eq.${cleanPhone},id.eq.${ownerId}`);
+        .or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
     } catch {
       // ignore
     }
@@ -970,3 +1059,4 @@ export async function recordOwnerFailedAttempt(
     lockedUntil: lockedUntil || undefined,
   };
 }
+

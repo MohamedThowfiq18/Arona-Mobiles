@@ -97,13 +97,21 @@ export async function POST(request: NextRequest) {
     if (isSupabaseConfigured()) {
       try {
         const supabase = getSupabaseAdminClient();
-        await supabase.from('owners').update({
+        const { error } = await supabase.from('owners').update({
           otp_verified: true,
           last_login_at: new Date().toISOString(),
           last_login_device: deviceSummary,
           failed_login_attempts: 0,
           locked_until: null,
-        }).eq('phone', cleanPhone);
+        }).or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+
+        if (error) {
+          await supabase.from('owners').update({
+            otp_verified: true,
+            failed_login_attempts: 0,
+            locked_until: null,
+          }).or(`phone.eq.${cleanPhone},phone.eq.91${cleanPhone},phone.eq.+91${cleanPhone}`);
+        }
       } catch {
         // ignore
       }

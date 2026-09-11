@@ -1,3 +1,4 @@
+
 import {
   createOwnerSession,
   verifyOwnerSession,
@@ -17,7 +18,7 @@ async function runMultiDeviceSessionTests() {
 
   // Step 1: Create 3 distinct device sessions
   console.log('1. Creating 3 concurrent device sessions...');
-  
+
   const tokenDev1 = await createOwnerSession(ownerId, ownerPhone);
   const sessionDev1 = await verifyOwnerSession(tokenDev1);
   if (!sessionDev1) throw new Error('Device 1 session verification failed');
